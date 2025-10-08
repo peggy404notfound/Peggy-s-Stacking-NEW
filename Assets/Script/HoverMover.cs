@@ -13,6 +13,10 @@ public class HoverMover : MonoBehaviour
     private float dir = 1f;
     private float originalGravity;
 
+    // —— 新增：数值形式的边界 —— //
+    private bool useNumericBounds = false;
+    private float leftX, rightX;
+
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
@@ -34,13 +38,31 @@ public class HoverMover : MonoBehaviour
         rb.gravityScale = originalGravity;  // 开始下落
     }
 
+    // —— 新增：支持 TurnManager 调用 —— //
+    public void SetBounds(float left, float right)
+    {
+        useNumericBounds = true;
+        leftX = Mathf.Min(left, right);
+        rightX = Mathf.Max(left, right);
+    }
+
     private void Update()
     {
         if (!hovering) return;
 
         transform.position += Vector3.right * dir * moveSpeed * Time.deltaTime;
 
-        if (leftBound && transform.position.x <= leftBound.position.x) dir = 1f;
-        if (rightBound && transform.position.x >= rightBound.position.x) dir = -1f;
+        if (useNumericBounds)
+        {
+            // 用 float 边界
+            if (transform.position.x <= leftX) dir = 1f;
+            if (transform.position.x >= rightX) dir = -1f;
+        }
+        else
+        {
+            // 用 Transform 边界
+            if (leftBound && transform.position.x <= leftBound.position.x) dir = 1f;
+            if (rightBound && transform.position.x >= rightBound.position.x) dir = -1f;
+        }
     }
 }
