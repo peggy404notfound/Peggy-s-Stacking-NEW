@@ -17,6 +17,7 @@ GameObject:
   - component: {fileID: 5159065652724990441}
   - component: {fileID: 150770514428070565}
   - component: {fileID: -7483287230380492424}
+  - component: {fileID: 584675444660949257}
   m_Layer: 6
   m_Name: Rectangle-A
   m_TagString: Block
@@ -251,3 +252,22 @@ MonoBehaviour:
   settleTime: 0.25
   secondaryCooldown: 0.1
   debugLog: 1
+--- !u!114 &584675444660949257
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4779037066227287782}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f5e3e629ab232d348918f133b18204c2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  enableOverride: 1
+  bottomRowCells: 0
+  xScale: 2
+  yScale: 1
+  yOffset: 0
+  renderOnTop: 1
+  sortingDelta: 1

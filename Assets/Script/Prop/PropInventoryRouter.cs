@@ -7,6 +7,9 @@ public class PropInventoryRouter : MonoBehaviour
     private const string ID_WALL = "brickwall";
     private const string ID_WEIGHT = "weight";
     private const string ID_GLUE = "glue";
+    private const string ID_ICE = "ice";
+    private const string ID_WIND = "wind";
+
 
     private TurnManager _tm;   // 引用 TurnManager（用于：当前回合判断、触发教学）
 
@@ -91,6 +94,26 @@ public class PropInventoryRouter : MonoBehaviour
             var placer = FindObjectOfType<GluePlacer>();
             if (placer != null) placer.Begin(playerId);
             else Debug.LogWarning("[Prop] 没找到 GluePlacer，无法上胶");
+            return;
+        }
+
+        if (id == ID_ICE)
+        {
+            // 当前玩家使用 → 对手的“下一块”标记为冰块
+            IceNextPieceSystem.Instance?.ApplyToOpponentNext(playerId);
+
+            // （可选）首用教学：如果你在 TurnManager 里实现了 TriggerIceAppearIfNeeded，就调用它
+            _tm?.TriggerIceAppearIfNeeded();
+
+            Debug.Log($"[Prop] P{playerId} used 'ice' -> mark opponent's next as ICE");
+            return;
+        }
+        if (id == ID_WIND || id == "wind")
+        {
+            var tm = TurnManager.Instance;
+            int user = (int)tm.currentPlayer;
+            WindGustSystem.Instance?.PlayGustForOpponent(user);
+            Debug.Log($"[Prop] P{user} used 'fan' -> wind {(user == 1 ? "L→R" : "R→L")}");
             return;
         }
 
