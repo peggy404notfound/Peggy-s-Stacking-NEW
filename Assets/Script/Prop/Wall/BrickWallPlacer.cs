@@ -1,44 +1,79 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class BrickWallPlacer : MonoBehaviour
 {
     [Header("必填")]
-    public Transform baseTransform;                 // 可留空，仅保持一致
-    public GameObject wallPrefab;                   // 砖墙预制体（SpriteRenderer + BoxCollider2D）
+    public Transform baseTransform;                 // 可留空，Awake里按Tag=Base寻找
+    public GameObject wallPrefab;
 
     [Header("左右移动边界（墙上若无 HoverMover 将自动添加并使用这些边界）")]
     public Transform leftBound;
     public Transform rightBound;
 
     [Header("碰撞设定")]
-    public LayerMask solidLayers;                   // 能托住墙的层（Base/Stack/Wall 等）
+    public LayerMask solidLayers;
     [Tooltip("当任意接触点法线的 y ≥ 阈值，认为被下面托住；越接近1越严格")]
     public float groundNormalYThreshold = 0.2f;
 
-    // 砖墙定点后，通知外部为“同一玩家”生成新的左右移动积木
+    // ==== 最后30s 跟随平台 ====
+    [Header("最后N秒：墙跟随平台X")]
+    public CountdownTimer timer;
+    public float followWhenRemainingSeconds = 30f;
+    public float followLerp = 30f;                  // 越大越紧
+    public bool keepKinematicAfterFinalize = true;  // 定点后保持Kinematic以便跟随
+
+    // ==== 赢家推塔窗口 撤退/失效 ====
+    [Header("赢家推塔窗口：撤退/失效")]
+    public bool retractOnWinnerPush = true;
+    public float retractDuration = 0.20f;
+    public Vector2 retractOffset = new Vector2(0f, -1.0f);
+    public float winnerPushWindowSeconds = 1.20f;
+    public bool hideSpriteWhenRetract = false;
+
+    // 定点后，通知外部“为同一玩家生成下一块左右移动积木”
     public Action<int> onNeedSpawnNext;
 
-    // 运行期
-    GameObject _wall;               // 当前放置的砖墙
-    Rigidbody2D _rb;                // 墙刚体
-    HoverMover _wallMover;          // 墙上的 HoverMover（按键时禁用）
-    GameObject _hiddenMoving;       // 被替换的原移动积木
-    int _playerId;                  // 1/2
-    bool _active;                   // 是否在放置流程中
-    bool _isFalling;                // 是否已开始重力下落
-    bool _finalized;                // 是否已定点
+    // ========== 运行期 ==========
+    GameObject _currentWall;          // 正在放置中的墙（未定点）
+    Rigidbody2D _currentRb;
+    Collider2D _currentCol;
+    SpriteRenderer _currentSr;
+    HoverMover _currentMover;
+    GameObject _hiddenMoving;         // 被本回合替换掉的左右移动积木
+    int _playerId;
+    bool _active;                     // 正在放置流程
+    bool _isFalling;                  // 已按键进入下落
+    bool _finalizedCurrent;           // 已定点（针对当前墙）
 
-    TurnManager _tm;                // 用于上锁/解锁输入 & 标记“把下一次落下指向当前登记的移动块”
+    TurnManager _tm;
+
+    // 跟踪“所有已定点墙”
+    class TrackedWall
+    {
+        public GameObject go;
+        public Rigidbody2D rb;
+        public Collider2D col;
+        public SpriteRenderer sr;
+        public float xOffsetFromBase;
+        public Vector3 finalizePos;
+        public bool retracted;
+    }
+    readonly List<TrackedWall> trackedWalls = new List<TrackedWall>();
 
     void Awake()
     {
         _tm = FindObjectOfType<TurnManager>();
+        if (!baseTransform)
+        {
+            var baseGo = GameObject.FindWithTag("Base");
+            if (baseGo) baseTransform = baseGo.transform;
+        }
     }
 
-    /// <summary>
-    /// 使用砖墙道具：把“当前左右移动积木”替换为砖墙（砖墙继续左右移动；按 S/↓ 开始重力下落）
-    /// </summary>
+    /// <summary>使用砖墙道具：把“当前左右移动积木”替换为砖墙（砖墙继续左右移动；按 S/↓ 开始重力下落）</summary>
     public void Begin(int playerId, GameObject currentMovingBlock)
     {
         if (playerId != 1 && playerId != 2) return;
@@ -48,50 +83,45 @@ public class BrickWallPlacer : MonoBehaviour
             return;
         }
 
-
         _playerId = playerId;
         _hiddenMoving = currentMovingBlock;
-        _hiddenMoving.SetActive(false); // 隐藏本回合原始块（不要销毁）
+        _hiddenMoving.SetActive(false);
 
-        // 在原位置生成实体砖墙
-        _wall = Instantiate(wallPrefab, currentMovingBlock.transform.position, Quaternion.identity);
-        _wall.name = $"Wall_P{playerId}";
+        // 生成“正在放置中的”墙
+        _currentWall = Instantiate(wallPrefab, currentMovingBlock.transform.position, Quaternion.identity);
+        _currentWall.name = $"Wall_P{playerId}";
 
-        // 确保不透明 & collider 实体
-        var sr = _wall.GetComponent<SpriteRenderer>();
-        if (sr) { var c = sr.color; c.a = 1f; sr.color = c; }
+        _currentSr = _currentWall.GetComponent<SpriteRenderer>();
+        if (_currentSr) { var c = _currentSr.color; c.a = 1f; _currentSr.color = c; }
 
-        var bc = _wall.GetComponent<BoxCollider2D>();
-        if (!bc) bc = _wall.AddComponent<BoxCollider2D>();
-        bc.isTrigger = false; // 必须是实体碰撞体
+        var bc = _currentWall.GetComponent<BoxCollider2D>();
+        if (!bc) bc = _currentWall.AddComponent<BoxCollider2D>();
+        bc.isTrigger = false;
+        _currentCol = bc;
 
-        // 刚体：先 Kinematic（不受重力），按键后切 Dynamic
-        _rb = _wall.GetComponent<Rigidbody2D>();
-        if (_rb == null) _rb = _wall.AddComponent<Rigidbody2D>();
-        _rb.bodyType = RigidbodyType2D.Kinematic;
-        _rb.gravityScale = Mathf.Max(1f, _rb.gravityScale); // 切 Dynamic 后生效
-        _rb.constraints = RigidbodyConstraints2D.FreezeRotation;
-        _rb.interpolation = RigidbodyInterpolation2D.Interpolate;
-        _rb.simulated = true;
+        _currentRb = _currentWall.GetComponent<Rigidbody2D>();
+        if (_currentRb == null) _currentRb = _currentWall.AddComponent<Rigidbody2D>();
+        _currentRb.bodyType = RigidbodyType2D.Kinematic;     // 悬停阶段
+        _currentRb.gravityScale = Mathf.Max(1f, _currentRb.gravityScale);
+        _currentRb.constraints = RigidbodyConstraints2D.FreezeRotation;
+        _currentRb.interpolation = RigidbodyInterpolation2D.Interpolate;
+        _currentRb.simulated = true;
 
-        // 让砖墙左右移动（如果 prefab 无 HoverMover 就自动加一个）
         SetupHoverMoverOnWall(currentMovingBlock);
 
-        // 给墙体挂碰撞代理 → 把墙身上的碰撞回调到本脚本
-        var proxy = _wall.AddComponent<BrickWallCollisionProxy>();
+        var proxy = _currentWall.AddComponent<BrickWallCollisionProxy>();
         proxy.Init(this, solidLayers, groundNormalYThreshold);
 
-        // 进入砖墙流程：锁住 TurnManager 的 S/↓ 输入
         _tm?.LockTurnInput();
 
         _active = true;
         _isFalling = false;
-        _finalized = false;
+        _finalizedCurrent = false;
     }
 
     void Update()
     {
-        if (!_active || _finalized || _wall == null) return;
+        if (!_active || _finalizedCurrent || _currentWall == null) return;
 
         bool keyDown = (_playerId == 1) ? Input.GetKeyDown(KeyCode.S)
                                         : Input.GetKeyDown(KeyCode.DownArrow);
@@ -101,107 +131,122 @@ public class BrickWallPlacer : MonoBehaviour
         {
             _isFalling = true;
 
-            // 停掉左右悬停（不改 HoverMover 本体，只在这里关闭）
-            if (_wallMover != null)
+            if (_currentMover != null)
             {
-                try { _wallMover.Drop(); } catch { }
-                _wallMover.enabled = false;
+                try { _currentMover.Drop(); } catch { }
+                _currentMover.enabled = false;
             }
 
-            if (_rb != null)
+            if (_currentRb != null)
             {
-                _rb.bodyType = RigidbodyType2D.Dynamic;      // 交给物理重力
-                if (_rb.gravityScale <= 0f) _rb.gravityScale = 1f;
-
-                // 轻推一下，避免 v=0 卡住
-                if (_rb.velocity.sqrMagnitude < 0.0001f)
-                    _rb.AddForce(Vector2.down * 0.1f, ForceMode2D.Impulse);
-
-                _rb.WakeUp();
+                _currentRb.bodyType = RigidbodyType2D.Dynamic;
+                if (_currentRb.gravityScale <= 0f) _currentRb.gravityScale = 1f;
+                if (_currentRb.velocity.sqrMagnitude < 0.0001f)
+                    _currentRb.AddForce(Vector2.down * 0.1f, ForceMode2D.Impulse);
+                _currentRb.WakeUp();
             }
             return;
         }
 
-        // 第二次按键：手动定点（空中也可定点）
-        if (keyDown && _isFalling && !_finalized)
+        // 第二次按键：手动定点
+        if (keyDown && _isFalling && !_finalizedCurrent)
         {
             TryFinalizeFromKey();
         }
     }
 
-    // 供碰撞代理调用：若满足条件则完成放置
+    void FixedUpdate()
+    {
+        // 遍历所有已定点墙进行“最后N秒跟随平台X”
+        if (baseTransform && timer != null && timer.RemainingSeconds > 0f &&
+            timer.RemainingSeconds <= followWhenRemainingSeconds)
+        {
+            float alpha = 1f - Mathf.Exp(-followLerp * Time.fixedDeltaTime);
+            for (int i = 0; i < trackedWalls.Count; i++)
+            {
+                var w = trackedWalls[i];
+                if (w == null || w.retracted || w.rb == null) continue;
+
+                Vector2 cur = w.rb.position;
+                float targetX = baseTransform.position.x + w.xOffsetFromBase;
+                float newX = Mathf.Lerp(cur.x, targetX, alpha);
+                w.rb.MovePosition(new Vector2(newX, cur.y));
+            }
+        }
+    }
+
+    // 供碰撞代理调用
     public void TryFinalizeFromCollision()
     {
-        if (_active && _isFalling && !_finalized)
+        if (_active && _isFalling && !_finalizedCurrent)
             FinalizePlacement();
     }
 
-    // 供按键调用的定点（与碰撞定点一致）
-    void TryFinalizeFromKey()
-    {
-        FinalizePlacement();
-    }
+    void TryFinalizeFromKey() => FinalizePlacement();
 
-    // —— 确认定点：停止流程，并让同一玩家生成下一块左右移动积木 —— //
+    // 确认定点：把“当前墙”登记到 trackedWalls
     void FinalizePlacement()
     {
-        if (_finalized) return;
-        _finalized = true;
+        if (_finalizedCurrent) return;
+        _finalizedCurrent = true;
 
-        // 彻底停住墙体
-        if (_rb)
+        float xOffset = 0f;
+        if (baseTransform)
+            xOffset = _currentWall.transform.position.x - baseTransform.position.x;
+
+        if (_currentRb)
         {
-            _rb.velocity = Vector2.zero;
-            _rb.angularVelocity = 0f;
-            _rb.bodyType = RigidbodyType2D.Static; // 锁定当前位置
+            _currentRb.velocity = Vector2.zero;
+            _currentRb.angularVelocity = 0f;
+            _currentRb.bodyType = keepKinematicAfterFinalize ? RigidbodyType2D.Kinematic : RigidbodyType2D.Static;
         }
 
+        // 登记
+        trackedWalls.Add(new TrackedWall
+        {
+            go = _currentWall,
+            rb = _currentRb,
+            col = _currentCol,
+            sr = _currentSr,
+            xOffsetFromBase = xOffset,
+            finalizePos = _currentWall.transform.position,
+            retracted = false
+        });
+
+        // 清理“当前流程”状态
         _active = false;
         _isFalling = false;
 
         int pid = _playerId;
         _playerId = 0;
 
-        // ★ 告诉 TurnManager：下一次 S/↓ 要“重定向”到当前登记的移动块（而不是之前被隐藏的那块）
         _tm?.ArmRedirectDrop();
-
-        // 生成同一玩家的新“左右移动积木”
         onNeedSpawnNext?.Invoke(pid);
+        StartCoroutine(UnlockAfterKeyRelease(pid));
 
-        // 解锁 TurnManager 输入（回到主循环，等待这位玩家对“新积木”按 S/↓）
-        StartCoroutine(UnlockAfterKeyRelease(pid));   // ← 延迟到按键抬起再解锁
-
-        // 旧移动块的引用交由外部新的生成流程自然覆盖
         _hiddenMoving = null;
-
-        System.Collections.IEnumerator UnlockAfterKeyRelease(int pid)
-        {
-            // 先等 1 帧，避免同一帧里被 TurnManager 看到这次按键
-            yield return null;
-
-            // 选对本玩家使用的那个键
-            KeyCode key = (pid == 1) ? KeyCode.S : KeyCode.DownArrow;
-
-            // 等到本次按键完全抬起
-            while (Input.GetKey(key))
-                yield return null;
-
-            // 再多等一帧更保险（避免边沿抖动）
-            yield return null;
-
-            // 现在才解锁；下一次新的按键才会被 TurnManager 消费
-            _tm?.UnlockTurnInput();
-        }
-
+        _currentWall = null;
+        _currentRb = null;
+        _currentCol = null;
+        _currentSr = null;
+        _currentMover = null;
     }
 
-    // —— 在“墙”上准备 HoverMover（必须在墙身上） —— //
+    IEnumerator UnlockAfterKeyRelease(int pid)
+    {
+        yield return null;
+        KeyCode key = (pid == 1) ? KeyCode.S : KeyCode.DownArrow;
+        while (Input.GetKey(key)) yield return null;
+        yield return null;
+        _tm?.UnlockTurnInput();
+        yield break;
+    }
+
     void SetupHoverMoverOnWall(GameObject sourceMovingBlock)
     {
-        var wallMover = _wall.GetComponent<HoverMover>();
-        if (wallMover == null) wallMover = _wall.AddComponent<HoverMover>();
+        var wallMover = _currentWall.GetComponent<HoverMover>();
+        if (wallMover == null) wallMover = _currentWall.AddComponent<HoverMover>();
 
-        // 设置边界：优先使用本脚本拖的左右边界
         if (leftBound && rightBound)
         {
             float min = Mathf.Min(leftBound.position.x, rightBound.position.x);
@@ -210,19 +255,69 @@ public class BrickWallPlacer : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning("[BrickWallPlacer] 未设置 leftBound/rightBound，墙体 HoverMover 将使用其默认边界。");
+            Debug.LogWarning("[BrickWallPlacer] 未设置 leftBound/rightBound，墙体 HoverMover 将使用默认边界。");
         }
 
-        // 设置所有权（若 HoverMover 有该字段则赋值；没有就忽略）
         var fld = typeof(HoverMover).GetField("ownerPlayerId");
         if (fld != null) fld.SetValue(wallMover, _playerId);
 
         wallMover.StartHover();
-        _wallMover = wallMover; // 保存引用，按键时禁用
+        _currentMover = wallMover;
+    }
+
+    // ============= 外部调用：赢家推塔窗口，所有墙撤退/失效 =============
+    public void BeginWinnerPushWindow() => BeginWinnerPushWindow(winnerPushWindowSeconds);
+
+    public void BeginWinnerPushWindow(float seconds)
+    {
+        if (!retractOnWinnerPush) return;
+        StartCoroutine(CoRetractAll(seconds));
+    }
+
+    IEnumerator CoRetractAll(float seconds)
+    {
+        // 对所有“已定点且未撤退”的墙执行撤退
+        foreach (var w in trackedWalls)
+        {
+            if (w == null || w.retracted || w.go == null) continue;
+
+            // 关闭碰撞
+            if (w.col) w.col.enabled = false;
+
+            // 可选：隐藏
+            if (hideSpriteWhenRetract && w.sr) w.sr.enabled = false;
+
+            // 视觉：轻微下沉
+            if (retractDuration > 0f)
+                StartCoroutine(CoLerpPos(w.go.transform, w.finalizePos, w.finalizePos + (Vector3)retractOffset, retractDuration));
+
+            w.retracted = true;
+        }
+
+        // 持续整个推塔窗口（用不缩放时间）
+        float t = 0f;
+        while (t < seconds)
+        {
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+    }
+
+    IEnumerator CoLerpPos(Transform tr, Vector3 from, Vector3 to, float dur)
+    {
+        float t = 0f;
+        while (t < dur)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(t / dur);
+            tr.position = Vector3.Lerp(from, to, u);
+            yield return null;
+        }
+        tr.position = to;
     }
 }
 
-// —— 附着在“墙体”上的小组件：把 OnCollisionEnter2D 转发给 BrickWallPlacer —— //
+// 把墙体的碰撞转发给 Placer，用来“触地即定点”
 public class BrickWallCollisionProxy : MonoBehaviour
 {
     BrickWallPlacer owner;
@@ -241,7 +336,6 @@ public class BrickWallCollisionProxy : MonoBehaviour
         if (owner == null) return;
         if ((solid.value & (1 << c.collider.gameObject.layer)) == 0) return;
 
-        // 至少一个接触点法线朝上 → 认为被托住
         for (int i = 0; i < c.contactCount; i++)
         {
             if (c.GetContact(i).normal.y >= yThreshold)

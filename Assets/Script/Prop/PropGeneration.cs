@@ -8,12 +8,18 @@ public class PropGeneration : MonoBehaviour
     public class WeightedItem
     {
         public GameObject prefab;
-        [Min(0f)] public float weight = 1f;
-        [Min(0)] public int turnsCooldown = 0;
+
+        [Header("权重 & 节律")]
+        [Min(0f)] public float weight = 1f;       // 抽中概率权重
+        [Min(0)] public int turnsCooldown = 0;    // 同一种道具两次出现之间的最小回合间隔（防重复）
+
+        [Header("解锁回合（该回合及之后才允许出现）")]
+        [Min(0)] public int availableFromTurn = 0; // 新增：例如填 5 表示第5回合及之后才可能出现
+
         [HideInInspector] public int lastSpawnTurn = -999999;
     }
 
-    [Header("带权重的道具表")]
+    [Header("带权重的道具表（在元素里设置 availableFromTurn / turnsCooldown）")]
     public List<WeightedItem> weightedItems = new List<WeightedItem>();
 
     [Header("出现几率")]
@@ -21,69 +27,69 @@ public class PropGeneration : MonoBehaviour
 
     [Header("引用")]
     public Transform baseTransform;
-    public LayerMask stackLayers;   // 塔/积木（用于“边缘采样”）
-    public LayerMask solidLayers;   // 防重叠（建议：包含 Base/Stack，但排除 Prop 自己）
+    public LayerMask solidLayers;      // 仅用于“防重叠”检测（建议包含 Base/Stack，排除 Prop 自己）
     public Transform itemsParent;
 
     [Header("移动范围限制（务必填写）")]
     public Transform leftBound;
     public Transform rightBound;
-    public Transform spawnPointY;   // 只用 Y
+    public Transform spawnPointY;      // 仅用 Y 来限制最高生成高度
 
     [Header("回合控制")]
-    public int firstSpawnAfterRounds = 1;
-    public int spawnEveryNRounds = 1;
+    public int firstSpawnAfterRounds = 1;   // 第几回合开始刷（全局）
+    public int spawnEveryNRounds = 1;       // 每 N 回合刷一次
     public int minItemsPerSpawn = 1;
     public int maxItemsPerSpawn = 1;
 
-    [Header("位置权重（第三项=1-前两项）")]
+    [Header("位置权重（仅两类：平台内 / 平台外）")]
+    [Tooltip("道具在平台上方（Base 的水平范围之内）生成的概率")]
     [Range(0f, 1f)] public float weightInsideBase = 0.70f;
-    [Range(0f, 1f)] public float weightOutsideBase = 0.15f;
+    [Tooltip("道具在平台水平范围之外（屏幕内两侧）生成的概率")]
+    [Range(0f, 1f)] public float weightOutsideBase = 0.30f;
 
     [Header("通用")]
-    public float minClearRadius = 0.25f;
-    public int maxTriesPerItem = 80;               // ↑ 提高尝试次数
-    public Vector2 insideAboveBaseRange = new Vector2(0.20f, 0.80f);
+    public float minClearRadius = 0.25f;             // 生成点与 Base/Stack 等硬体的最小清空半径
+    public int maxTriesPerItem = 50;
+    public Vector2 insideAboveBaseRange = new Vector2(0.20f, 0.80f); // 平台“内”时，距 Base 顶面的随机高度范围（世界单位）
 
     [Header("高度限制")]
     [Tooltip("道具最高高度 = 生成高度 - 本值")]
     public float yTopMarginBelowSpawn = 0.5f;
 
     [Header("稳产设置")]
-    public bool forceSpawnWhenEligible = true;        // 命中“该回合应刷”时强制至少刷 1 个
-    public bool debugLogs = false;                    // 需要排查时再勾上
+    public bool forceSpawnWhenEligible = true; // 命中“该回合应刷”时，若失败则兜底至少刷 1 个
+    public bool debugLogs = false;
 
+    // ===== 常量/状态 =====
     const float VIEWPORT_PADDING = 0.06f;
-    const float COLUMN_EDGE_OUT_OFFSET = 0.30f;
-    const float EDGE_VERTICAL_JITTER = 0.18f;
 
     int _currentTurnId = 0;
     readonly Dictionary<int, List<GameObject>> _activeByTurn = new();
 
-    // —— 便捷访问 —— //
+    // 便捷访问
     float MoveXMin => leftBound ? leftBound.position.x : float.NegativeInfinity;
     float MoveXMax => rightBound ? rightBound.position.x : float.PositiveInfinity;
     float MoveYCap => spawnPointY ? (spawnPointY.position.y - Mathf.Max(0f, yTopMarginBelowSpawn)) : float.PositiveInfinity;
 
-    // ========== TurnManager 调用 ==========
+    // ========== TurnManager 调用口 ==========
     public void OnTurnStart(int turnId)
     {
         _currentTurnId = turnId;
 
-        // 回合节律
+        // 回合节律（全局）
         if (turnId < firstSpawnAfterRounds) return;
         int sinceFirst = turnId - firstSpawnAfterRounds;
         if (sinceFirst % Mathf.Max(1, spawnEveryNRounds) != 0) return;
 
-        // 概率
+        // 概率触发
         if (Random.value > Mathf.Clamp01(spawnChancePerWave)) return;
 
         int want = Mathf.Clamp(Random.Range(minItemsPerSpawn, maxItemsPerSpawn + 1), 1, 999);
         int made = SpawnWave(want);
 
+        // 兜底：至少刷 1 个
         if (forceSpawnWhenEligible && made == 0)
         {
-            // 兜底：保证至少刷一个
             if (TrySpawnOne(forceFallback: true)) made = 1;
         }
 
@@ -113,13 +119,13 @@ public class PropGeneration : MonoBehaviour
     {
         if (!baseTransform) return false;
 
-        // 1) 正常随机采样
+        // 1) 正常随机采样（只在“平台内/平台外”两类里选）
         for (int t = 0; t < maxTriesPerItem; t++)
         {
-            if (!TryPickPosition(out var pos)) continue;
+            if (!TryPickPositionSimple(out var pos)) continue;
 
             var prefab = PickPrefabWeighted(_currentTurnId);
-            if (!prefab) continue; // 不早退，继续尝试
+            if (!prefab) continue; // 不早退，换一次采样/抽取
 
             var go = Instantiate(prefab, new Vector3(pos.x, pos.y, 0f), Quaternion.identity, itemsParent ? itemsParent : transform);
             Register(go);
@@ -127,7 +133,7 @@ public class PropGeneration : MonoBehaviour
             return true;
         }
 
-        // 2) 兜底（forceFallback 或全局开关）
+        // 2) 兜底
         if (forceFallback || forceSpawnWhenEligible)
         {
             if (TryFallbackPosition(out var pos))
@@ -158,25 +164,80 @@ public class PropGeneration : MonoBehaviour
         list.Add(go);
     }
 
-    bool TryPickPosition(out Vector2 pos)
+    // ========= 选位置（简化版，仅“平台内 / 平台外”） =========
+    bool TryPickPositionSimple(out Vector2 pos)
     {
-        // 位置采样（Inside / Outside / ColumnEdge）
-        float r = Random.value;
-        if (r < weightInsideBase) pos = SampleInsideBase();
-        else if (r < weightInsideBase + weightOutsideBase) pos = SampleOutsideBase();
-        else if (!TrySampleOnTowerColumnEdge(out pos)) pos = SampleInsideBase();
+        pos = Vector2.zero;
 
-        // 约束判定
+        // 按权重决定内外（只两类）
+        float wInside = Mathf.Max(0f, weightInsideBase);
+        float wOutside = Mathf.Max(0f, weightOutsideBase);
+        float sum = wInside + wOutside;
+        if (sum <= 0f) wInside = 1f; // 防止全 0 导致卡死
+        float r = Random.value * (sum <= 0 ? 1f : sum);
+
+        if (r <= wInside) pos = SampleInsideBase();
+        else pos = SampleOutsideBase();
+
+        // 基本约束
         if (!IsWithinMoveBounds(pos)) return false;
         if (!IsInsideCamera(pos)) return false;
-
-        // 清空判定：只与 solidLayers 判重，建议不要把“Prop”自身层放进来
         if (!IsClear(pos, minClearRadius)) return false;
 
         return true;
     }
 
-    // —— fallback：保底放一个 —— //
+    Vector2 SampleInsideBase()
+    {
+        var rect = GetBaseRect();
+
+        float xMin = Mathf.Max(rect.xMin, MoveXMin);
+        float xMax = Mathf.Min(rect.xMax, MoveXMax);
+        if (xMax <= xMin) { xMin = rect.center.x - 0.01f; xMax = rect.center.x + 0.01f; }
+
+        float yMin = rect.yMax + Mathf.Min(insideAboveBaseRange.x, insideAboveBaseRange.y);
+        float yMax = Mathf.Min(MoveYCap, rect.yMax + Mathf.Max(insideAboveBaseRange.x, insideAboveBaseRange.y));
+
+        return new Vector2(Random.Range(xMin, xMax), Random.Range(yMin, yMax));
+    }
+
+    Vector2 SampleOutsideBase()
+    {
+        var baseRect = GetBaseRect();
+        var camRect = GetCameraWorldRect(VIEWPORT_PADDING);
+
+        // 纵向范围：Base 顶 到 可用上界
+        float yMin = Mathf.Max(baseRect.yMax, camRect.yMin);
+        float yMax = Mathf.Min(MoveYCap, camRect.yMax);
+        float h = Mathf.Max(0f, yMax - yMin);
+
+        // 左侧区域（屏幕内 & 不与 Base 水平重合）
+        float leftMinX = Mathf.Max(camRect.xMin, MoveXMin);
+        float leftMaxX = Mathf.Min(baseRect.xMin, MoveXMax);
+
+        // 右侧区域
+        float rightMinX = Mathf.Max(baseRect.xMax, MoveXMin);
+        float rightMaxX = Mathf.Min(camRect.xMax, MoveXMax);
+
+        bool hasLeft = leftMaxX > leftMinX && h > 0f;
+        bool hasRight = rightMaxX > rightMinX && h > 0f;
+
+        if (!hasLeft && !hasRight)
+            return SampleInsideBase(); // 没有外侧空间则退回“内侧”
+
+        // 面积按比例随机左右侧
+        float areaLeft = hasLeft ? (leftMaxX - leftMinX) * h : 0f;
+        float areaRight = hasRight ? (rightMaxX - rightMinX) * h : 0f;
+        float sum = areaLeft + areaRight;
+
+        float pick = Random.value * sum;
+        if (pick < areaLeft)
+            return new Vector2(Random.Range(leftMinX, leftMaxX), Random.Range(yMin, yMax));
+        else
+            return new Vector2(Random.Range(rightMinX, rightMaxX), Random.Range(yMin, yMax));
+    }
+
+    // ―― fallback：保底放一个（平台内中央偏上） ――
     bool TryFallbackPosition(out Vector2 pos)
     {
         var rect = GetBaseRect();
@@ -186,25 +247,28 @@ public class PropGeneration : MonoBehaviour
         float yMin = rect.yMax + Mathf.Min(insideAboveBaseRange.x, insideAboveBaseRange.y);
         float yMax = Mathf.Min(MoveYCap, rect.yMax + Mathf.Max(insideAboveBaseRange.x, insideAboveBaseRange.y));
 
-        // 先尝试一个较“稳”的点（矩形中心偏上）
-        pos = new Vector2(Mathf.Lerp(xMin, xMax, 0.5f), Mathf.Lerp(yMin, yMax, 0.7f));
-
-        // 只避开 Base/Stack 的硬冲突（把 Prop 从 solidLayers 里排除）
-        if (!IsClearHard(pos, minClearRadius * 0.7f))
+        pos = new Vector2(Mathf.Lerp(xMin, xMax, 0.5f), Mathf.Lerp(yMin, yMax, 0.75f));
+        if (!IsClear(pos, minClearRadius * 0.7f))
+        {
             pos = new Vector2(Mathf.Lerp(xMin, xMax, 0.5f), Mathf.Lerp(yMin, yMax, 0.9f));
-
-        // 仍不行就算成功（交给物理引擎微调/轻微重叠）
+        }
         return true;
     }
 
-    // ========== 按权重选道具 ==========
-    private GameObject PickPrefabWeighted(int turnId)
+    // ========== 选道具（加入“解锁回合”过滤） ==========
+    GameObject PickPrefabWeighted(int turnId)
     {
         var pool = new List<WeightedItem>();
         foreach (var wi in weightedItems)
         {
             if (!wi.prefab) continue;
+
+            // 解锁回合限制：达到 availableFromTurn 才可进入候选
+            if (turnId < wi.availableFromTurn) continue;
+
+            // 冷却：避免同一物品过于频繁
             if (wi.turnsCooldown > 0 && (turnId - wi.lastSpawnTurn) <= wi.turnsCooldown) continue;
+
             if (wi.weight <= 0f) continue;
             pool.Add(wi);
         }
@@ -230,123 +294,32 @@ public class PropGeneration : MonoBehaviour
         return last.prefab;
     }
 
-    // ========== 采样 ==========
-    private Vector2 SampleInsideBase()
-    {
-        var rect = GetBaseRect();
-        float xMin = Mathf.Max(rect.xMin, MoveXMin);
-        float xMax = Mathf.Min(rect.xMax, MoveXMax);
-        if (xMax <= xMin) { xMin = rect.center.x - 0.01f; xMax = rect.center.x + 0.01f; }
-
-        float yMin = rect.yMax + Mathf.Min(insideAboveBaseRange.x, insideAboveBaseRange.y);
-        float yMax = Mathf.Min(MoveYCap, rect.yMax + Mathf.Max(insideAboveBaseRange.x, insideAboveBaseRange.y));
-        return new Vector2(Random.Range(xMin, xMax), Random.Range(yMin, yMax));
-    }
-
-    private Vector2 SampleOutsideBase()
-    {
-        var baseRect = GetBaseRect();
-        var camRect = GetCameraWorldRect(VIEWPORT_PADDING);
-
-        float yMin = Mathf.Max(baseRect.yMax, camRect.yMin);
-        float yMax = Mathf.Min(MoveYCap, camRect.yMax);
-        float h = Mathf.Max(0f, yMax - yMin);
-
-        float leftMinX = Mathf.Max(camRect.xMin, MoveXMin);
-        float leftMaxX = Mathf.Min(baseRect.xMin, MoveXMax);
-        float rightMinX = Mathf.Max(baseRect.xMax, MoveXMin);
-        float rightMaxX = Mathf.Min(camRect.xMax, MoveXMax);
-
-        bool hasLeft = leftMaxX > leftMinX && h > 0f;
-        bool hasRight = rightMaxX > rightMinX && h > 0f;
-
-        float areaLeft = hasLeft ? (leftMaxX - leftMinX) * h : 0f;
-        float areaRight = hasRight ? (rightMaxX - rightMinX) * h : 0f;
-        float sum = areaLeft + areaRight;
-        if (sum <= 0f) return SampleInsideBase();
-
-        float pick = Random.value * sum;
-        if (pick < areaLeft) return new Vector2(Random.Range(leftMinX, leftMaxX), Random.Range(yMin, yMax));
-        else return new Vector2(Random.Range(rightMinX, rightMaxX), Random.Range(yMin, yMax));
-    }
-
-    private bool TrySampleOnTowerColumnEdge(out Vector2 pos)
-    {
-        pos = Vector2.zero;
-        var blocks = Physics2D.OverlapCircleAll(baseTransform.position, 60f, stackLayers);
-        if (blocks == null || blocks.Length == 0) return false;
-
-        float medianWidth = 1f;
-        var widths = new List<float>();
-        foreach (var b in blocks) widths.Add(b.bounds.size.x);
-        widths.Sort();
-        if (widths.Count > 0) medianWidth = widths[widths.Count / 2] * 1.05f;
-
-        var columns = new Dictionary<int, List<Collider2D>>();
-        foreach (var c in blocks)
-        {
-            int key = Mathf.RoundToInt(c.bounds.center.x / medianWidth);
-            if (!columns.TryGetValue(key, out var list)) { list = new List<Collider2D>(); columns[key] = list; }
-            list.Add(c);
-        }
-        if (columns.Count == 0) return false;
-
-        var col = columns.ElementAt(Random.Range(0, columns.Count)).Value;
-        float colMinX = float.MaxValue, colMaxX = float.MinValue;
-        foreach (var c in col)
-        {
-            colMinX = Mathf.Min(colMinX, c.bounds.min.x);
-            colMaxX = Mathf.Max(colMaxX, c.bounds.max.x);
-        }
-
-        var pick = col[Random.Range(0, col.Count)];
-        var bnd = pick.bounds;
-        float y = Mathf.Clamp(
-            Random.Range(bnd.min.y, bnd.max.y) + Random.Range(-EDGE_VERTICAL_JITTER, EDGE_VERTICAL_JITTER),
-            bnd.min.y - EDGE_VERTICAL_JITTER, bnd.max.y + EDGE_VERTICAL_JITTER
-        );
-        y = Mathf.Min(y, MoveYCap);
-
-        bool rightSide = Random.value > 0.5f;
-        float x = rightSide ? (colMaxX + COLUMN_EDGE_OUT_OFFSET) : (colMinX - COLUMN_EDGE_OUT_OFFSET);
-        if (x < MoveXMin || x > MoveXMax) return false;
-
-        pos = new Vector2(x, y);
-        return true;
-    }
-
     // ========== 工具 ==========
-    private Rect GetBaseRect()
+    Rect GetBaseRect()
     {
-        var bc2d = baseTransform.GetComponent<BoxCollider2D>();
+        var bc2d = baseTransform ? baseTransform.GetComponent<BoxCollider2D>() : null;
         if (bc2d)
         {
             var c = (Vector2)baseTransform.TransformPoint(bc2d.offset);
             var s = Vector2.Scale(bc2d.size, baseTransform.lossyScale);
             return new Rect(c - s * 0.5f, s);
         }
-        var r = baseTransform.GetComponent<Renderer>();
+        var r = baseTransform ? baseTransform.GetComponent<Renderer>() : null;
         if (r != null)
         {
             var b = r.bounds;
             return new Rect(new Vector2(b.min.x, b.min.y), new Vector2(b.size.x, b.size.y));
         }
-        var p = baseTransform.position;
+        var p = baseTransform ? baseTransform.position : Vector3.zero;
         return new Rect(new Vector2(p.x - 1f, p.y - 0.5f), new Vector2(2f, 1f));
     }
 
-    private bool IsClear(Vector2 worldPos, float radius)
+    bool IsClear(Vector2 worldPos, float radius)
     {
         return Physics2D.OverlapCircle(worldPos, radius, solidLayers) == null;
     }
 
-    // “硬避让”（只避开 Base/Stack 等硬体；请把 Prop 自己的 Layer 不要放到这个 Mask）
-    private bool IsClearHard(Vector2 worldPos, float radius)
-    {
-        return Physics2D.OverlapCircle(worldPos, radius, solidLayers) == null;
-    }
-
-    private bool IsInsideCamera(Vector2 worldPos)
+    bool IsInsideCamera(Vector2 worldPos)
     {
         var cam = Camera.main;
         if (!cam) return true;
@@ -356,7 +329,7 @@ public class PropGeneration : MonoBehaviour
                v.y > VIEWPORT_PADDING && v.y < 1f - VIEWPORT_PADDING;
     }
 
-    private Rect GetCameraWorldRect(float padding01)
+    Rect GetCameraWorldRect(float padding01)
     {
         var cam = Camera.main;
         if (!cam) return new Rect(-1000f, -1000f, 2000f, 2000f);
@@ -367,13 +340,13 @@ public class PropGeneration : MonoBehaviour
         return Rect.MinMaxRect(xMin, yMin, xMax, yMax);
     }
 
-    private bool IsWithinMoveBounds(Vector2 p)
+    bool IsWithinMoveBounds(Vector2 p)
     {
         return p.x >= MoveXMin && p.x <= MoveXMax && p.y <= MoveYCap;
     }
 
-    // ========== 根据标记触发“首次出现”教程 ==========
-    private void MaybeTriggerFirstAppearHint(GameObject go)
+    // ========== 首次出现提示（保留你原逻辑） ==========
+    void MaybeTriggerFirstAppearHint(GameObject go)
     {
         if (go.GetComponentInChildren<PropGlueHint>(true) != null) { TurnManager.Instance?.TriggerGlueAppearIfNeeded(); return; }
         if (go.GetComponentInChildren<PropWeightHint>(true) != null) { TurnManager.Instance?.TriggerWeightAppearIfNeeded(); return; }
