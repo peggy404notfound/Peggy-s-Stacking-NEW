@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
@@ -6,16 +7,13 @@ using UnityEngine.Events;
 [DisallowMultipleComponent]
 public class PlayerInventoryOneSlot : MonoBehaviour
 {
-    // --- 静态注册表：支持 GetForPlayer(old API 兼容) ---
     private static readonly Dictionary<int, PlayerInventoryOneSlot> s_registry =
         new Dictionary<int, PlayerInventoryOneSlot>();
 
-    /// <summary>按玩家ID获取该玩家的单槽背包实例（兼容旧代码）。</summary>
     public static PlayerInventoryOneSlot GetForPlayer(int playerId)
     {
         if (s_registry.TryGetValue(playerId, out var inv) && inv != null) return inv;
 
-        // 兜底：如果注册表里没有，尝试在场景里找并注册
         var all = FindObjectsOfType<PlayerInventoryOneSlot>(includeInactive: true);
         foreach (var it in all)
         {
@@ -25,69 +23,85 @@ public class PlayerInventoryOneSlot : MonoBehaviour
         return null;
     }
 
-    // --- 实例区 ---
-    [Header("玩家ID（用于区分多玩家&静态查询）")]
+    [Header("玩家ID")]
     public int playerId = 1;
 
-    [Header("当前道具ID（Inspector可见；请通过 CurrentPropId 访问）")]
+    [Header("当前道具（只读）")]
     [SerializeField] private string currentPropId = "";
-
-    /// <summary>对外只读：当前背包中的道具id（为空=没有道具）</summary>
     public string CurrentPropId => currentPropId;
-
-    /// <summary>是否为空槽</summary>
     public bool IsEmpty => string.IsNullOrEmpty(currentPropId);
 
-    [Header("（可选）声音反馈")]
+    // ---------- 音效 ----------
+    [Header("音效")]
+    public AudioSource audioSource;
+    [Tooltip("玩家碰到道具瞬间（接触道具时）")]
     public AudioClip pickupSfx;
+    [Tooltip("道具正式进入槽位时")]
+    public AudioClip putInSlotSfx;
+    [Tooltip("消耗/使用道具时")]
     public AudioClip consumeSfx;
     [Range(0f, 1f)] public float sfxVolume = 1f;
-    public AudioSource audioSource; // 不填则自动用本物体上的 AudioSource（若存在）
 
-    [Header("事件：背包内容变化时触发（供UI/动画/特效直接在Inspector里绑定）")]
+    // ---------- 视觉（图标弹跳 + 粒子） ----------
+    [Header("UI 图标（必填）")]
+    public RectTransform slotIcon;
+
+    [Header("弹跳节奏（先正常 X 秒，再“砰”地放大回弹）")]
+    [Tooltip("入槽后，保持原始大小的时间（秒）")]
+    public float delayBeforePulse = 0.15f;
+    [Tooltip("放大到 pulseScale 的用时")]
+    public float scaleUpDuration = 0.08f;
+    [Tooltip("从 pulseScale 回到 1 的用时")]
+    public float scaleDownDuration = 0.12f;
+    [Tooltip("放大目标比例，例如 1.2 = 120%")]
+    public float pulseScale = 1.20f;
+
+    [Header("粒子")]
+    [Tooltip("迸发亮点的粒子预制体（放在 Canvas 内用 Particles/Unlit 或 URP Particles Unlit Additive）")]
+    public GameObject slotBurstPrefab;
+    [Tooltip("实例化出来的粒子父物体（不填就用 slotIcon 的 parent）")]
+    public Transform particleParent;
+    [Tooltip("粒子生存期（秒），到时自动销毁实例")]
+    public float particleLife = 1.2f;
+
+    // ---------- 事件 ----------
+    [Header("事件：背包内容变化时触发")]
     public UnityEvent onChangedUnity = new UnityEvent();
-
-    /// <summary>事件：背包内容变化时触发（供代码订阅，如UI脚本）</summary>
     public event Action OnChanged;
 
-    // --- 生命周期：注册/反注册 ---
-    private void Awake()
-    {
-        // 注册本实例
-        s_registry[playerId] = this;
-    }
-    private void OnEnable()
-    {
-        s_registry[playerId] = this;
-    }
-    private void OnDisable()
-    {
-        // 只在被禁用且仍指向自己时才移除，防止覆盖
-        if (s_registry.TryGetValue(playerId, out var who) && who == this)
-            s_registry.Remove(playerId);
-    }
-    private void OnDestroy()
-    {
-        if (s_registry.TryGetValue(playerId, out var who) && who == this)
-            s_registry.Remove(playerId);
-    }
+    // ---------- 内部 ----------
+    Vector3 _iconScale0;
+    Coroutine _pulseCo;
 
-    /// <summary>
-    /// 设置/覆盖当前道具（拾取时调用）
-    /// </summary>
+    void Awake()
+    {
+        s_registry[playerId] = this;
+        if (slotIcon) _iconScale0 = slotIcon.localScale;
+    }
+    void OnEnable() { s_registry[playerId] = this; }
+    void OnDisable() { if (s_registry.TryGetValue(playerId, out var who) && who == this) s_registry.Remove(playerId); }
+    void OnDestroy() { if (s_registry.TryGetValue(playerId, out var who) && who == this) s_registry.Remove(playerId); }
+
+    // =============== 外部调用口 ===============
+
+    /// <summary>玩家“接触到道具”的瞬间（仅播拾取音效，不入槽）。</summary>
+    public void OnPropTouched() => PlaySfx(pickupSfx);
+
+    /// <summary>把道具放入这一格（会触发音效、粒子、图标弹跳）。</summary>
     public void Set(string propId)
     {
         currentPropId = propId ?? string.Empty;
-        PlaySfx(pickupSfx);
+
+        PlaySfx(putInSlotSfx);
+        PlaySlotFeedback();      // 粒子 + 弹跳
+
         NotifyChanged();
 #if UNITY_EDITOR
         Debug.Log($"[Inv] P{playerId} got '{currentPropId}'");
 #endif
     }
 
-    /// <summary>
-    /// 使用并清空（返回被使用的道具ID；若为空返回空串）
-    /// </summary>
+    /// <summary>消耗/使用当前道具，返回道具ID。</summary>
     public string Consume()
     {
         if (string.IsNullOrEmpty(currentPropId))
@@ -103,38 +117,82 @@ public class PlayerInventoryOneSlot : MonoBehaviour
         return used;
     }
 
-    /// <summary>仅查看不清空</summary>
-    public string Peek() => currentPropId;
+    // =============== 视觉反馈 ===============
 
-    /// <summary>外部强制清空（如回合重置）</summary>
-    public void Clear()
+    void PlaySlotFeedback()
     {
-        if (string.IsNullOrEmpty(currentPropId)) return;
-        currentPropId = string.Empty;
-        NotifyChanged();
-#if UNITY_EDITOR
-        Debug.Log($"[Inv] P{playerId} cleared (now empty)");
-#endif
+        // 粒子
+        if (slotBurstPrefab && slotIcon)
+        {
+            var parent = particleParent ? particleParent : slotIcon.parent;
+            var go = Instantiate(slotBurstPrefab, slotIcon.position, Quaternion.identity, parent);
+            var ps = go.GetComponent<ParticleSystem>();
+            if (ps) ps.Play();
+            Destroy(go, particleLife);
+        }
+
+        // 弹跳：先保持原始大小 delayBeforePulse 秒，再“砰”地放大→回弹
+        if (slotIcon)
+        {
+            if (_pulseCo != null) StopCoroutine(_pulseCo);
+            _pulseCo = StartCoroutine(PulseWithDelay());
+        }
     }
 
-    private void NotifyChanged()
+    IEnumerator PulseWithDelay()
     {
-        onChangedUnity?.Invoke();
-        OnChanged?.Invoke();
+        // 先保持原始大小 X 秒
+        slotIcon.localScale = _iconScale0;
+        if (delayBeforePulse > 0f)
+            yield return new WaitForSecondsRealtime(delayBeforePulse);
+
+        // 放大
+        float t = 0f;
+        while (t < scaleUpDuration)
+        {
+            t += Time.unscaledDeltaTime;
+            float k = Mathf.Clamp01(t / Mathf.Max(0.0001f, scaleUpDuration));
+            // 轻微的“EaseOutBack”感觉
+            float ease = 1f - Mathf.Pow(1f - k, 3f);
+            slotIcon.localScale = _iconScale0 * Mathf.Lerp(1f, pulseScale, ease);
+            yield return null;
+        }
+
+        // 回弹
+        t = 0f;
+        while (t < scaleDownDuration)
+        {
+            t += Time.unscaledDeltaTime;
+            float k = Mathf.Clamp01(t / Mathf.Max(0.0001f, scaleDownDuration));
+            // EaseOut
+            float ease = 1f - Mathf.Pow(1f - k, 2f);
+            slotIcon.localScale = _iconScale0 * Mathf.Lerp(pulseScale, 1f, ease);
+            yield return null;
+        }
+        slotIcon.localScale = _iconScale0;
+        _pulseCo = null;
     }
 
-    private void PlaySfx(AudioClip clip)
+    // =============== 辅助 ===============
+
+    void PlaySfx(AudioClip clip)
     {
         if (!clip) return;
         var src = audioSource ? audioSource : GetComponent<AudioSource>();
         if (src) src.PlayOneShot(clip, sfxVolume);
     }
 
+    void NotifyChanged()
+    {
+        onChangedUnity?.Invoke();
+        OnChanged?.Invoke();
+    }
+
 #if UNITY_EDITOR
-    private void OnValidate()
+    void OnValidate()
     {
         sfxVolume = Mathf.Clamp01(sfxVolume);
-        // 确保注册表里是最新的playerId映射
+        if (slotIcon && _iconScale0 == Vector3.zero) _iconScale0 = slotIcon.localScale;
         if (isActiveAndEnabled) s_registry[playerId] = this;
     }
 #endif

@@ -679,9 +679,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1551360465}
-  - component: {fileID: 1551360466}
-  - component: {fileID: 1551360467}
   - component: {fileID: 1551360468}
+  - component: {fileID: 1551360469}
   m_Layer: 0
   m_Name: Game
   m_TagString: Untagged
@@ -704,41 +703,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1551360466
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1551360463}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 200cc5834698ab14e88f215b89c10a5a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
---- !u!114 &1551360467
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1551360463}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7df3575df198cac40911750b9074e0eb, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  blockPrefabP1: {fileID: 5334720530676642643, guid: 0390abfa067aa854599e77a44cb84ea2, type: 3}
-  blockPrefabP2: {fileID: 5334720530676642643, guid: b5347711377496b4f87be299e6d40ea4, type: 3}
-  spawnPoint: {fileID: 2103175339}
-  leftBound: {fileID: 177542561}
-  rightBound: {fileID: 1105038198}
-  infiniteTurns: 1
-  piecesPerPlayer: 10
-  inputTimeout: 9999
-  settleSpeed: 0.05
-  nextTurnDelay: 1
-  fallBelowOffset: 3
 --- !u!114 &1551360468
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -759,6 +723,29 @@ MonoBehaviour:
   extraGap: 0.2
   downSmooth: 25
   snapThreshold: 1.5
+--- !u!114 &1551360469
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1551360463}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c556662f4dc1b5d46aa61e8dae959d67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  spawnPoint: {fileID: 2103175339}
+  leftBound: {fileID: 177542561}
+  rightBound: {fileID: 1105038198}
+  blockPrefabP1: {fileID: 5334720530676642643, guid: 40c4cef475d9ead43a5a44fb97d07955, type: 3}
+  blockPrefabP2: {fileID: 5334720530676642643, guid: a568251e96b091c4198b1ebb8f2b3ff3, type: 3}
+  infiniteTurns: 1
+  piecesPerPlayer: 10
+  inputTimeout: 10
+  nextTurnDelay: 0.3
+  p1DropKey: 115
+  p2DropKey: 274
 --- !u!1 &2103175338
 GameObject:
   m_ObjectHideFlags: 0

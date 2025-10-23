@@ -1163,7 +1163,19 @@ MonoBehaviour:
   freezeTimeOnGameOver: 1
   onGameOver:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 1349067750}
+        m_TargetAssemblyTypeName: PostGameCounter, Assembly-CSharp
+        m_MethodName: StartOnGameOver
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!114 &502080223
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1177,43 +1189,21 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   durationSeconds: 180
-  autoStart: 1
+  autoStart: 0
   useScaledTime: 0
   timeLabel: {fileID: 340244581}
   warningThreshold: 10
-  enableWarningColor: 1
   normalColor: {r: 0.52156866, g: 0.37254903, b: 0.7607844, a: 1}
-  warningColor: {r: 1, g: 0, b: 0, a: 1}
-  onTick:
-    m_PersistentCalls:
-      m_Calls: []
-  onTimesUp:
-    m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 502080222}
-        m_TargetAssemblyTypeName: GameEndManager, Assembly-CSharp
-        m_MethodName: GameOver
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
-      - m_Target: {fileID: 1349067750}
-        m_TargetAssemblyTypeName: PostGameCounter, Assembly-CSharp
-        m_MethodName: StartOnGameOver
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
+  warningColor: {r: 0.52156866, g: 0.37254903, b: 0.7607844, a: 1}
+  normalScale: 1
+  bigMax: 1.15
+  bigUp: 0.2
+  bigDown: 0.2
+  smallMax: 1.05
+  smallUp: 0.06
+  smallDown: 0.06
+  audioSource: {fileID: 0}
+  tickLoopClip: {fileID: 0}
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0
@@ -2278,10 +2268,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   playerId: 1
   currentPropId: 
+  audioSource: {fileID: 0}
   pickupSfx: {fileID: 0}
+  putInSlotSfx: {fileID: 0}
   consumeSfx: {fileID: 0}
   sfxVolume: 1
-  audioSource: {fileID: 0}
+  slotIcon: {fileID: 2098534752}
+  delayBeforePulse: 0.2
+  scaleUpDuration: 0.1
+  scaleDownDuration: 0.2
+  pulseScale: 1.2
+  slotBurstPrefab: {fileID: 0}
+  particleParent: {fileID: 2098534752}
+  particleLife: 1
   onChangedUnity:
     m_PersistentCalls:
       m_Calls: []
@@ -3050,6 +3049,125 @@ MonoBehaviour:
   prefsKey: tut_prop_glue
   showScope: 0
   showOnSceneStart: 0
+--- !u!1 &1147496309
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1147496310}
+  - component: {fileID: 1147496312}
+  - component: {fileID: 1147496311}
+  - component: {fileID: 1147496313}
+  - component: {fileID: 1147496314}
+  m_Layer: 5
+  m_Name: PreGameController
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &1147496310
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1147496309}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1466759598}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 1920, y: 1080}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1147496311
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1147496309}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 21300000, guid: a88aa3746d3141b4bb14f4fdaae9f061, type: 3}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &1147496312
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1147496309}
+  m_CullTransparentMesh: 1
+--- !u!95 &1147496313
+Animator:
+  serializedVersion: 5
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1147496309}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: d6b43ae6e8de809448596caa41976812, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
+--- !u!114 &1147496314
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1147496309}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 62d18150d44a4d0429599737fea967c8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  animator: {fileID: 1147496313}
+  mainTimer: {fileID: 502080223}
+  turnManager: {fileID: 1551360467}
+  animationStateName: PreGame
+  preGameClip: {fileID: 7400000, guid: ec6c1833f9f05c546b2b628642cee08f, type: 2}
+  animationLength: 4
+  sfxSource: {fileID: 0}
+  sfxBeep: {fileID: 0}
+  sfxGo: {fileID: 0}
 --- !u!1 &1149491734
 GameObject:
   m_ObjectHideFlags: 0
@@ -3478,10 +3596,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   playerId: 2
   currentPropId: 
+  audioSource: {fileID: 0}
   pickupSfx: {fileID: 0}
+  putInSlotSfx: {fileID: 0}
   consumeSfx: {fileID: 0}
   sfxVolume: 1
-  audioSource: {fileID: 0}
+  slotIcon: {fileID: 315937065}
+  delayBeforePulse: 0.15
+  scaleUpDuration: 0.08
+  scaleDownDuration: 0.12
+  pulseScale: 1.2
+  slotBurstPrefab: {fileID: 0}
+  particleParent: {fileID: 0}
+  particleLife: 1.2
   onChangedUnity:
     m_PersistentCalls:
       m_Calls: []
@@ -4214,7 +4341,7 @@ MonoBehaviour:
   leftAnchor: {fileID: 1613986549}
   rightAnchor: {fileID: 154967908}
   mainTime: 2
-  zoneSize: {x: 10, y: 5}
+  zoneSize: {x: 12, y: 5}
   targetLayers:
     serializedVersion: 2
     m_Bits: 64
@@ -4223,7 +4350,7 @@ MonoBehaviour:
   windVisualRight: {fileID: 386867393}
   windVisualLeft: {fileID: 1407828536}
   useFixedCenter: 1
-  fixedCenter: {x: 0, y: 2}
+  fixedCenter: {x: 0, y: 1}
   hideHoveringPieceDuringGust: 1
 --- !u!1 &1437206084
 GameObject:
@@ -4428,6 +4555,7 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 340244580}
+  - {fileID: 1147496310}
   m_Father: {fileID: 442961291}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -4496,7 +4624,7 @@ Canvas:
   m_AdditionalShaderChannelsFlag: 25
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 1
   m_TargetDisplay: 0
 --- !u!1 &1471199731
 GameObject:
@@ -4637,7 +4765,7 @@ Canvas:
   m_Enabled: 1
   serializedVersion: 3
   m_RenderMode: 0
-  m_Camera: {fileID: 0}
+  m_Camera: {fileID: 1014455952}
   m_PlaneDistance: 100
   m_PixelPerfect: 0
   m_ReceivesEvents: 1
@@ -4648,7 +4776,7 @@ Canvas:
   m_AdditionalShaderChannelsFlag: 0
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
-  m_SortingOrder: 1
+  m_SortingOrder: 10
   m_TargetDisplay: 0
 --- !u!1 &1551360463
 GameObject:
@@ -4719,7 +4847,7 @@ MonoBehaviour:
   brickUseHint: {fileID: 975429779}
   p1PropUseKeyHint: {fileID: 763093335}
   p2PropUseKeyHint: {fileID: 492617492}
-  redLineHint: {fileID: 928935935}
+  redLineHint: {fileID: 0}
   currentMovingBlockP1: {fileID: 0}
   currentMovingBlockP2: {fileID: 0}
   inputLocked: 0
@@ -5335,31 +5463,31 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   weightedItems:
   - prefab: {fileID: 5816413669984962291, guid: 2c369c5c45023104b811c279f2f1865d, type: 3}
-    weight: 10
+    weight: 0
     turnsCooldown: 2
     availableFromTurn: 7
     lastSpawnTurn: 0
   - prefab: {fileID: 4192839734828375420, guid: 6d9acacade03b3b42b143ef175b462c6, type: 3}
-    weight: 8
+    weight: 0
     turnsCooldown: 3
     availableFromTurn: 9
     lastSpawnTurn: 0
   - prefab: {fileID: 2421380611846690026, guid: e3a736e9799826f4290f1ddb009f0090, type: 3}
-    weight: 7
+    weight: 0
     turnsCooldown: 4
     availableFromTurn: 11
     lastSpawnTurn: 0
   - prefab: {fileID: 8910185700098288865, guid: f8dda2372a94cba47b2fb2af192a4c27, type: 3}
     weight: 5
     turnsCooldown: 5
-    availableFromTurn: 13
+    availableFromTurn: 1
     lastSpawnTurn: 0
   - prefab: {fileID: 9074114796369199211, guid: a90679c943c44244294067840d514d2b, type: 3}
-    weight: 5
+    weight: 0
     turnsCooldown: 5
     availableFromTurn: 15
     lastSpawnTurn: 0
-  spawnChancePerWave: 0.5
+  spawnChancePerWave: 0.7
   baseTransform: {fileID: 85711599}
   solidLayers:
     serializedVersion: 2
@@ -5377,9 +5505,12 @@ MonoBehaviour:
   minClearRadius: 0.5
   maxTriesPerItem: 30
   insideAboveBaseRange: {x: 0.15, y: 0.8}
-  yTopMarginBelowSpawn: 0.5
+  yTopMarginBelowSpawn: 1
   forceSpawnWhenEligible: 1
   debugLogs: 1
+  extraBlockAvoidRadius: 1
+  verticalSafeBand: 1.6
+  fallingSpeedThreshold: 0.1
 --- !u!4 &1678745876
 Transform:
   m_ObjectHideFlags: 0

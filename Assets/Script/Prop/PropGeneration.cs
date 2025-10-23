@@ -60,6 +60,16 @@ public class PropGeneration : MonoBehaviour
     public bool forceSpawnWhenEligible = true; // 命中“该回合应刷”时，若失败则兜底至少刷 1 个
     public bool debugLogs = false;
 
+    [Header("防卡位额外判定")]
+    [Tooltip("刷道具时避开积木的半径（米）。建议≈道具直径）")]
+    public float extraBlockAvoidRadius = 0.6f;
+
+    [Tooltip("从候选点往上预留一条安全竖带高度，内有下落积木则不刷（米）")]
+    public float verticalSafeBand = 0.8f;
+
+    [Tooltip("判定为“在向下落”的速度阈值（米/秒，Y< -threshold）")]
+    public float fallingSpeedThreshold = 0.2f;
+
     // ===== 常量/状态 =====
     const float VIEWPORT_PADDING = 0.06f;
 
@@ -124,10 +134,16 @@ public class PropGeneration : MonoBehaviour
         {
             if (!TryPickPositionSimple(out var pos)) continue;
 
-            var prefab = PickPrefabWeighted(_currentTurnId);
-            if (!prefab) continue; // 不早退，换一次采样/抽取
+            // [FIX #1] 智能避让：离积木过近 或 其上方安全带内有下落积木 → 放弃该点
+            if (IsUnsafeBecauseOfBlocks(pos)) continue;
 
-            var go = Instantiate(prefab, new Vector3(pos.x, pos.y, 0f), Quaternion.identity, itemsParent ? itemsParent : transform);
+            var prefab = PickPrefabWeighted(_currentTurnId);
+            if (!prefab) continue; // 不早退，继续尝试
+
+            var go = Instantiate(prefab, new Vector3(pos.x, pos.y, 0f),
+                                 Quaternion.identity, itemsParent ? itemsParent : transform);
+
+            // [FIX #2] —— 显现保护期（协程禁用/恢复 Collider）
             Register(go);
             MaybeTriggerFirstAppearHint(go);
             return true;
@@ -141,7 +157,10 @@ public class PropGeneration : MonoBehaviour
                 var prefab = PickPrefabWeighted(_currentTurnId);
                 if (prefab)
                 {
-                    var go = Instantiate(prefab, new Vector3(pos.x, pos.y, 0f), Quaternion.identity, itemsParent ? itemsParent : transform);
+                    var go = Instantiate(prefab, new Vector3(pos.x, pos.y, 0f),
+                                         Quaternion.identity, itemsParent ? itemsParent : transform);
+
+                    // [FIX #2 - fallback 同样加保护期]
                     Register(go);
                     MaybeTriggerFirstAppearHint(go);
                     if (debugLogs) Debug.Log("[PropGen] fallback spawn");
@@ -153,6 +172,36 @@ public class PropGeneration : MonoBehaviour
         if (debugLogs) Debug.Log("[PropGen] no spawn (sampling failed)");
         return false;
     }
+
+    bool IsUnsafeBecauseOfBlocks(Vector2 pos)
+    {
+        // 1) 圆域避让：离任意 BlockMark 太近就不刷
+        var hits = Physics2D.OverlapCircleAll(pos, extraBlockAvoidRadius);
+        foreach (var h in hits)
+        {
+            if (!h) continue;
+            if (h.GetComponentInParent<BlockMark>() != null)
+                return true;
+        }
+
+        // 2) 竖向安全带：pos 往上 verticalSafeBand 高度内，有“正在向下”的积木就不刷
+        Vector2 boxCenter = pos + Vector2.up * (verticalSafeBand * 0.5f);
+        Vector2 boxSize = new Vector2(extraBlockAvoidRadius * 2f, verticalSafeBand);
+        var area = Physics2D.OverlapBoxAll(boxCenter, boxSize, 0f);
+        foreach (var a in area)
+        {
+            if (!a) continue;
+            var mark = a.GetComponentInParent<BlockMark>();
+            if (!mark) continue;
+
+            var rb = mark.GetComponent<Rigidbody2D>();
+            if (rb && rb.velocity.y < -Mathf.Abs(fallingSpeedThreshold))
+                return true; // 正在向下穿过该竖带
+        }
+
+        return false;
+    }
+
 
     void Register(GameObject go)
     {

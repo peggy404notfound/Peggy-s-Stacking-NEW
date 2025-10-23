@@ -13,12 +13,12 @@ GameObject:
   - component: {fileID: 2699567615521103375}
   - component: {fileID: 1418230395192026038}
   - component: {fileID: 2912502713830938737}
-  - component: {fileID: 8431070471422793607}
   - component: {fileID: 1353246836366493720}
   - component: {fileID: 2622222926867556710}
   - component: {fileID: 9123776755787780878}
+  - component: {fileID: -7223288391608660717}
   m_Layer: 6
-  m_Name: Square-A
+  m_Name: Test-A
   m_TagString: Block
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -183,22 +183,6 @@ MonoBehaviour:
   stackLayers:
     serializedVersion: 2
     m_Bits: 64
---- !u!114 &8431070471422793607
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5334720530676642643}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a5c7334e51e1521408e6f8647a983450, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  moveSpeed: 4
-  autoDropSeconds: 3
-  leftBound: {fileID: 0}
-  rightBound: {fileID: 0}
 --- !u!114 &1353246836366493720
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -253,6 +237,19 @@ MonoBehaviour:
   settleTime: 0.25
   secondaryCooldown: 0.1
   debugLog: 1
+--- !u!114 &-7223288391608660717
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5334720530676642643}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 97e14d9ed45026c45a0553f85a187ddf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  moveSpeed: 3
 --- !u!1 &8131250592794705269
 GameObject:
   m_ObjectHideFlags: 0
