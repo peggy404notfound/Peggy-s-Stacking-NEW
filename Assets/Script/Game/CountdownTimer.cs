@@ -26,6 +26,11 @@ public class CountdownTimer : MonoBehaviour
     public AudioSource audioSource;
     public AudioClip tickLoopClip;
 
+    [Header("BGM Control")]
+    public AudioSource bgmSource;
+    public AudioClip bgmClip;
+
+
     // --- state ---
     float _remain;
     bool _running;
@@ -66,7 +71,11 @@ public class CountdownTimer : MonoBehaviour
             StopTickLoop();
             StopPulse();
             ApplyScale(1f);
-            
+
+            // 仅在彻底结束时停 BGM
+            if (bgmSource != null && bgmSource.isPlaying)
+                bgmSource.Stop();
+
             // 新增：时间到 → 触发结算
             var mgr = FindObjectOfType<GameEndManager>();
             if (mgr != null) mgr.GameOver();
@@ -193,6 +202,13 @@ public class CountdownTimer : MonoBehaviour
         StopPulse();
         UpdateLabel(false);
         ApplyScale(1f);
+        // 只要开始计时，就播放 BGM（不要在别处暂停它）
+        if (bgmSource != null && bgmClip != null)
+        {
+            bgmSource.clip = bgmClip;
+            bgmSource.loop = true;
+            if (!bgmSource.isPlaying) bgmSource.Play();
+        }
     }
     public void ResetTo(float seconds)
     {
@@ -205,8 +221,23 @@ public class CountdownTimer : MonoBehaviour
         UpdateLabel(false);
         ApplyScale(1f);
     }
-    public void Pause() { _running = false; StopTickLoop(); }
-    public void Resume() { if (_remain > 0f) { _running = true; if (_remain <= warningThreshold) StartTickLoop(); } }
+    public void Pause()
+    {
+        _running = false;
+        // 仍然建议停掉 warning 的 tick 循环
+        StopTickLoop();
+        // 不要 Pause/Stop bgmSource
+    }
+
+    public void Resume()
+    {
+        if (_remain > 0f)
+        {
+            _running = true;
+            if (_remain <= warningThreshold) StartTickLoop();
+            // 不要 UnPause/Play bgmSource（它一直在播）
+        }
+    }
 
     void OnDisable() { StopTickLoop(); StopPulse(); }
     void OnDestroy() { StopTickLoop(); StopPulse(); }

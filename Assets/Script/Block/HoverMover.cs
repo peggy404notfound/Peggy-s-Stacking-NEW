@@ -96,10 +96,14 @@ public class HoverMover : MonoBehaviour
             if (rightBound && transform.position.x >= rightBound.position.x) dir = -1f;
         }
 
-        // 自动下落检测
         if (autoDropSeconds > 0f && hoverStartTime >= 0f)
         {
-            if (Time.time - hoverStartTime >= autoDropSeconds)
+            if (GamePause.IsPaused)
+            {
+                // 冻结“自动下落”的计时，让 Hover 期间不会因为 UI 而超时
+                hoverStartTime += Time.deltaTime;
+            }
+            else if (Time.time - hoverStartTime >= autoDropSeconds)
             {
                 Drop();
             }
