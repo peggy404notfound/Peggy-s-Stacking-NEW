@@ -17,9 +17,9 @@ public class CountdownTimer : MonoBehaviour
     public float normalScale = 1f;
 
     [Header("Per-Second Double Pulse (Big -> Small)")]
-    public float bigMax = 1.40f;
-    public float bigUp = 0.10f, bigDown = 0.10f;
-    public float smallMax = 1.18f;
+    public float bigMax = 1.15f;
+    public float bigUp = 0.2f, bigDown = 0.2f;
+    public float smallMax = 1.05f;
     public float smallUp = 0.06f, smallDown = 0.06f;
 
     [Header("Audio (Looped Tick in Warning)")]
@@ -30,6 +30,9 @@ public class CountdownTimer : MonoBehaviour
     public AudioSource bgmSource;
     public AudioClip bgmClip;
 
+    // === New: Inspector-adjustable BGM volume ===
+    [Range(0f, 1f)]
+    public float bgmVolume = 1f;
 
     // --- state ---
     float _remain;
@@ -41,10 +44,8 @@ public class CountdownTimer : MonoBehaviour
     Coroutine _pulseCo;
     float _pulseScale = 1f;
 
-    // --- 兼容旧接口：供其他脚本读取 ---
+    // === Back-compat for other scripts ===
     public float RemainingSeconds => _remain;
-    public float ElapsedSeconds => Mathf.Max(0f, durationSeconds - _remain);
-    public float Progress01 => durationSeconds > 0f ? 1f - (_remain / durationSeconds) : 1f;
 
     void Awake()
     {
@@ -52,52 +53,65 @@ public class CountdownTimer : MonoBehaviour
         if (timeLabel) _baseScale = timeLabel.rectTransform.localScale;
         UpdateLabel(false);
         StopTickLoop();
+
+        // apply initial bgm volume
+        ApplyBgmVolume();
     }
 
-    void Start() { if (autoStart) StartTimer(); }
+    void Start()
+    {
+        if (autoStart) StartTimer();
+    }
 
     void Update()
     {
-        if (!_running) return;
-
-        float dt = useScaledTime ? Time.deltaTime : Time.unscaledDeltaTime;
-        _remain -= dt;
-
-        if (_remain <= 0f)
+        if (_running)
         {
-            _remain = 0f;
-            _running = false;
-            UpdateLabel(false);
-            StopTickLoop();
-            StopPulse();
-            ApplyScale(1f);
+            // reflect runtime volume tweaks from Inspector
+            ApplyBgmVolume();
 
-            // 仅在彻底结束时停 BGM
-            if (bgmSource != null && bgmSource.isPlaying)
-                bgmSource.Stop();
+            float dt = useScaledTime ? Time.deltaTime : Time.unscaledDeltaTime;
+            _remain -= dt;
 
-            // 新增：时间到 → 触发结算
-            var mgr = FindObjectOfType<GameEndManager>();
-            if (mgr != null) mgr.GameOver();
-            else FindObjectOfType<PostGameCounter>()?.StartOnGameOver();
-            return;
+            if (_remain <= 0f)
+            {
+                _remain = 0f;
+                _running = false;
+                UpdateLabel(false);
+                StopTickLoop();
+                StopPulse();
+                ApplyScale(1f);
+
+                if (bgmSource != null && bgmSource.isPlaying)
+                    bgmSource.Stop();
+
+                var mgr = FindObjectOfType<GameEndManager>();
+                if (mgr != null) mgr.GameOver();
+                else FindObjectOfType<PostGameCounter>()?.StartOnGameOver();
+                return;
+            }
+
+            bool inWarning = _remain <= warningThreshold;
+            HandleWarningTransition(inWarning);
+
+            int whole = Mathf.CeilToInt(_remain);
+            if (inWarning && whole != _lastWhole)
+            {
+                _lastWhole = whole;
+                StartDoublePulse();
+            }
+            else if (!inWarning)
+            {
+                _lastWhole = -1;
+            }
+
+            UpdateLabel(inWarning);
         }
-
-        bool inWarning = _remain <= warningThreshold;
-        HandleWarningTransition(inWarning);
-
-        int whole = Mathf.CeilToInt(_remain); // 显示的整秒
-        if (inWarning && whole != _lastWhole)
+        else
         {
-            _lastWhole = whole;
-            StartDoublePulse(); // 每秒触发：大→小
+            // still apply volume when paused so slider is always responsive
+            ApplyBgmVolume();
         }
-        else if (!inWarning)
-        {
-            _lastWhole = -1;
-        }
-
-        UpdateLabel(inWarning);
     }
 
     // --- UI ---
@@ -141,7 +155,7 @@ public class CountdownTimer : MonoBehaviour
     IEnumerator CoOnePulse(float max, float up, float down)
     {
         float t = 0f;
-        // 放大
+        // enlarge
         while (t < up && up > 0f)
         {
             t += useScaledTime ? Time.deltaTime : Time.unscaledDeltaTime;
@@ -150,7 +164,7 @@ public class CountdownTimer : MonoBehaviour
             ApplyScale(_pulseScale);
             yield return null;
         }
-        // 缩回
+        // shrink back
         t = 0f;
         while (t < down && down > 0f)
         {
@@ -202,14 +216,16 @@ public class CountdownTimer : MonoBehaviour
         StopPulse();
         UpdateLabel(false);
         ApplyScale(1f);
-        // 只要开始计时，就播放 BGM（不要在别处暂停它）
+
         if (bgmSource != null && bgmClip != null)
         {
             bgmSource.clip = bgmClip;
             bgmSource.loop = true;
+            ApplyBgmVolume();
             if (!bgmSource.isPlaying) bgmSource.Play();
         }
     }
+
     public void ResetTo(float seconds)
     {
         durationSeconds = Mathf.Max(0f, seconds);
@@ -221,12 +237,11 @@ public class CountdownTimer : MonoBehaviour
         UpdateLabel(false);
         ApplyScale(1f);
     }
+
     public void Pause()
     {
         _running = false;
-        // 仍然建议停掉 warning 的 tick 循环
         StopTickLoop();
-        // 不要 Pause/Stop bgmSource
     }
 
     public void Resume()
@@ -235,10 +250,18 @@ public class CountdownTimer : MonoBehaviour
         {
             _running = true;
             if (_remain <= warningThreshold) StartTickLoop();
-            // 不要 UnPause/Play bgmSource（它一直在播）
         }
     }
 
     void OnDisable() { StopTickLoop(); StopPulse(); }
     void OnDestroy() { StopTickLoop(); StopPulse(); }
+
+    // === volume helper ===
+    void ApplyBgmVolume()
+    {
+        if (bgmSource != null)
+        {
+            bgmSource.volume = Mathf.Clamp01(bgmVolume);
+        }
+    }
 }

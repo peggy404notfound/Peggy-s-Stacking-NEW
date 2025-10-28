@@ -2,21 +2,16 @@ using UnityEngine;
 
 public static class GamePause
 {
+    // 软暂停：仅供逻辑判断使用，不改 Time.timeScale，不改全局音频
     public static bool IsPaused { get; private set; }
 
     public static void Pause()
     {
-        if (IsPaused) return;
-        Time.timeScale = 0f;
-        AudioListener.pause = true;
         IsPaused = true;
     }
 
     public static void Resume()
     {
-        if (!IsPaused) return;
-        Time.timeScale = 1f;
-        AudioListener.pause = false;
         IsPaused = false;
     }
 }

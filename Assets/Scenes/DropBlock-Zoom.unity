@@ -1193,6 +1193,7 @@ MonoBehaviour:
   tickLoopClip: {fileID: 8300000, guid: 54590463ffc99524aa4b49e987ccecc8, type: 3}
   bgmSource: {fileID: 502080224}
   bgmClip: {fileID: 8300000, guid: 7fdafbef5b2e3f44aa8224a945315c3b, type: 3}
+  bgmVolume: 0.45
 --- !u!82 &502080224
 AudioSource:
   m_ObjectHideFlags: 0
@@ -4978,6 +4979,7 @@ GameObject:
   - component: {fileID: 1551360467}
   - component: {fileID: 1551360468}
   - component: {fileID: 1551360469}
+  - component: {fileID: 1551360470}
   m_Layer: 0
   m_Name: Game
   m_TagString: Untagged
@@ -5117,6 +5119,18 @@ MonoBehaviour:
   - 7
   - 2
   - 2
+--- !u!114 &1551360470
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1551360463}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b4ff1860685c08c46ae563ece496ebcc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &1606133663
 GameObject:
   m_ObjectHideFlags: 0
