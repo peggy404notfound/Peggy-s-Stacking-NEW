@@ -8,6 +8,10 @@ public class IceNextPieceSystem : MonoBehaviour
     public GameObject iceBlockPrefabForP1;   // 当“P1 的下一块”需要变成冰时使用
     public GameObject iceBlockPrefabForP2;   // 当“P2 的下一块”需要变成冰时使用
 
+    [Header("使用冰冻道具时音效（新增）")]
+    public AudioClip useIceSfx;              // 使用冰冻道具的音效
+    [Range(0f, 1f)] public float useSfxVolume = 1f;
+
     // 标记：某方“下一块”为冰（一次性）
     bool nextPieceFrozenForP1 = false;
     bool nextPieceFrozenForP2 = false;
@@ -24,11 +28,16 @@ public class IceNextPieceSystem : MonoBehaviour
     /// </summary>
     public void ApplyToOpponentNext(int userPlayerId)
     {
+        // --- 新增：播放使用音效 ---
+        if (useIceSfx != null)
+        {
+            AudioSource.PlayClipAtPoint(useIceSfx, Camera.main.transform.position, useSfxVolume);
+        }
+
         if (userPlayerId == 1) nextPieceFrozenForP2 = true;
         else nextPieceFrozenForP1 = true;
 
         Debug.Log($"[ICE] user={userPlayerId} -> mark next frozen: P1={nextPieceFrozenForP1}, P2={nextPieceFrozenForP2}");
-        TurnManager.Instance?.TriggerIceAppearIfNeeded();
 
         // 首次出现教学（如果你在 TurnManager 里加了 iceHint / TriggerIceAppearIfNeeded）
         TurnManager.Instance?.TriggerIceAppearIfNeeded();

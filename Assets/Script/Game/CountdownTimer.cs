@@ -49,6 +49,20 @@ public class CountdownTimer : MonoBehaviour
 
     void Awake()
     {
+        if (bgmSource != null)
+        {
+            bgmSource.loop = true;
+            bgmSource.playOnAwake = false;
+        }
+
+        // 若误把 tick 和 bgm 指到同一个 AudioSource，自动为 tick 创建专用 Source
+        if (audioSource != null && audioSource == bgmSource)
+        {
+            Debug.LogWarning("CountdownTimer: 'audioSource' (tick) 与 'bgmSource' 相同，已为 tick 创建专用 AudioSource。");
+            audioSource = gameObject.AddComponent<AudioSource>();
+            audioSource.playOnAwake = false;
+        }
+
         _remain = Mathf.Max(0f, durationSeconds);
         if (timeLabel) _baseScale = timeLabel.rectTransform.localScale;
         UpdateLabel(false);

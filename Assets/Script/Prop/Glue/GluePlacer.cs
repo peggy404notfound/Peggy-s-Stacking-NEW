@@ -19,12 +19,22 @@ public class GluePlacer : MonoBehaviour
     [Tooltip("若存在多个同名物体是否全部激活")]
     public bool activateAllMatches = true;
 
+    [Header("使用道具时音效（新增）")]
+    public AudioClip useGlueSfx;        // 使用胶水道具时的音效
+    [Range(0f, 1f)] public float useSfxVolume = 1f;
+
     /// <summary>
     /// 玩家使用胶水：为该玩家“当前待落下”的方块添加 BottomGlueEffect，
     /// 并激活 prefab 中的 Glue 子物体。
     /// </summary>
     public void Begin(int playerId)
     {
+        // --- 新增：播放使用音效 ---
+        if (useGlueSfx != null)
+        {
+            AudioSource.PlayClipAtPoint(useGlueSfx, Camera.main.transform.position, useSfxVolume);
+        }
+
         var target = FindCurrentFallingPiece(playerId);
         if (!target)
         {

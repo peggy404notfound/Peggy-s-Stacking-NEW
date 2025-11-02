@@ -37,11 +37,21 @@ public class WeightPlacer : MonoBehaviour
     [Header("仅放大外观时：外观子物体名称（不区分大小写）")]
     public string visualChildName = "Visual";
 
+    [Header("使用道具时音效（新增）")]
+    public AudioClip useWeightSfx;        // 使用配重道具时的音效
+    [Range(0f, 1f)] public float useSfxVolume = 1f;
+
     /// <summary>
     /// 对指定玩家使用配重道具（整体放大 + 加重）
     /// </summary>
     public void Begin(int playerId)
     {
+        // --- 新增：播放使用音效 ---
+        if (useWeightSfx != null)
+        {
+            AudioSource.PlayClipAtPoint(useWeightSfx, Camera.main.transform.position, useSfxVolume);
+        }
+
         var target = FindCurrentPiece(playerId);
         if (!target)
         {
