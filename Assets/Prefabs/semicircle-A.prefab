@@ -290,9 +290,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   moveSpeed: 4
-  autoDropSeconds: 3
+  autoDropSeconds: 4
   leftBound: {fileID: 0}
   rightBound: {fileID: 0}
+  useNumericBounds: 0
+  leftX: -5
+  rightX: 5
+  dropPickupWindow: 1
 --- !u!114 &-4746574914190951612
 MonoBehaviour:
   m_ObjectHideFlags: 0

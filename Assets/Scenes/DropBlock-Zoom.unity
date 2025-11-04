@@ -1377,7 +1377,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3f95ce3545c394048a0a2a7f397399d0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  durationSeconds: 60
+  durationSeconds: 180
   autoStart: 0
   useScaledTime: 0
   timeLabel: {fileID: 340244581}
@@ -1643,11 +1643,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   spawnPoint: {fileID: 2103175339}
-  safeOffset: 2
+  safeOffset: 1
   baseCollider: {fileID: 85711597}
   baseSize: 6
-  spawnTopBuffer: 2
-  topMargin: 2
+  spawnTopBuffer: 3
+  topMargin: 3
   smoothSpeed: 5
 --- !u!1 &529777319
 GameObject:
@@ -2566,7 +2566,7 @@ MonoBehaviour:
   currentPropId: 
   audioSource: {fileID: 872403984}
   pickupSfx: {fileID: 8300000, guid: 70a4ab29f26bd8b44897b427254609e0, type: 3}
-  putInSlotSfx: {fileID: 0}
+  putInSlotSfx: {fileID: 8300000, guid: 70a4ab29f26bd8b44897b427254609e0, type: 3}
   consumeSfx: {fileID: 0}
   sfxVolume: 1
   slotIcon: {fileID: 2098534752}
@@ -3761,7 +3761,7 @@ MonoBehaviour:
   animationLength: 4
   sfxSource: {fileID: 1147496315}
   sfxBeep: {fileID: 8300000, guid: 114505091bd37c14a84bfbf01b04baf8, type: 3}
-  sfxGo: {fileID: 0}
+  sfxGo: {fileID: 8300000, guid: 114505091bd37c14a84bfbf01b04baf8, type: 3}
 --- !u!82 &1147496315
 AudioSource:
   m_ObjectHideFlags: 0
@@ -4678,7 +4678,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   iceBlockPrefabForP1: {fileID: 2361423764126124113, guid: 594d0a191479ef74bbec55d2c3d3f07b, type: 3}
   iceBlockPrefabForP2: {fileID: 3048236154367348208, guid: efe02f8aa876f3b40a867ea16d17fd5e, type: 3}
-  useIceSfx: {fileID: 8300000, guid: 8210cfef4be61d340963c8c084073e25, type: 3}
+  useIceSfx: {fileID: 8300000, guid: caa6e54ba56d0b54d8a6cc8dea3e59be, type: 3}
   useSfxVolume: 0.7
 --- !u!1 &1341866952
 GameObject:
@@ -6456,7 +6456,7 @@ MonoBehaviour:
     availableFromTurn: 11
     lastSpawnTurn: 0
   - prefab: {fileID: 9074114796369199211, guid: a90679c943c44244294067840d514d2b, type: 3}
-    weight: 5
+    weight: 7
     turnsCooldown: 5
     availableFromTurn: 15
     lastSpawnTurn: 0
@@ -6475,15 +6475,19 @@ MonoBehaviour:
   maxItemsPerSpawn: 1
   weightInsideBase: 0.9
   weightOutsideBase: 0.1
-  minClearRadius: 0.5
+  minClearRadius: 1
   maxTriesPerItem: 30
   insideAboveBaseRange: {x: 0.15, y: 0.8}
   yTopMarginBelowSpawn: 1
+  minSpawnHeight: -1
   forceSpawnWhenEligible: 1
   debugLogs: 1
-  extraBlockAvoidRadius: 1
+  extraBlockAvoidRadius: 0.5
   verticalSafeBand: 1.6
   fallingSpeedThreshold: 0.1
+  blockSpawnsInLastSeconds: 1
+  noSpawnLastSeconds: 10
+  countdown: {fileID: 502080223}
 --- !u!4 &1678745876
 Transform:
   m_ObjectHideFlags: 0
@@ -6776,7 +6780,7 @@ Canvas:
   m_Enabled: 1
   serializedVersion: 3
   m_RenderMode: 0
-  m_Camera: {fileID: 0}
+  m_Camera: {fileID: 519420031}
   m_PlaneDistance: 100
   m_PixelPerfect: 0
   m_ReceivesEvents: 1
@@ -6787,7 +6791,7 @@ Canvas:
   m_AdditionalShaderChannelsFlag: 25
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
-  m_SortingOrder: 10
+  m_SortingOrder: 50
   m_TargetDisplay: 0
 --- !u!1 &1873965766
 GameObject:
@@ -7087,6 +7091,10 @@ PrefabInstance:
       propertyPath: InitialModule.startRotation.minScalar
       value: -0.08726646
       objectReference: {fileID: 0}
+    - target: {fileID: 1828363248577009163, guid: c807d6e291f2f3c4883915bfc406d88a, type: 3}
+      propertyPath: m_Layer
+      value: 11
+      objectReference: {fileID: 0}
     - target: {fileID: 2366998448889680125, guid: c807d6e291f2f3c4883915bfc406d88a, type: 3}
       propertyPath: prewarm
       value: 0
@@ -7113,11 +7121,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2595037841106692471, guid: c807d6e291f2f3c4883915bfc406d88a, type: 3}
       propertyPath: m_LocalPosition.x
-      value: -0.03
+      value: -0.030029297
       objectReference: {fileID: 0}
     - target: {fileID: 2595037841106692471, guid: c807d6e291f2f3c4883915bfc406d88a, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 5.87
+      value: 9.419983
       objectReference: {fileID: 0}
     - target: {fileID: 2595037841106692471, guid: c807d6e291f2f3c4883915bfc406d88a, type: 3}
       propertyPath: m_LocalPosition.z
@@ -7129,15 +7137,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2595037841106692471, guid: c807d6e291f2f3c4883915bfc406d88a, type: 3}
       propertyPath: m_LocalRotation.x
-      value: 0
+      value: -0
       objectReference: {fileID: 0}
     - target: {fileID: 2595037841106692471, guid: c807d6e291f2f3c4883915bfc406d88a, type: 3}
       propertyPath: m_LocalRotation.y
-      value: 0
+      value: -0
       objectReference: {fileID: 0}
     - target: {fileID: 2595037841106692471, guid: c807d6e291f2f3c4883915bfc406d88a, type: 3}
       propertyPath: m_LocalRotation.z
-      value: 0
+      value: -0
       objectReference: {fileID: 0}
     - target: {fileID: 2595037841106692471, guid: c807d6e291f2f3c4883915bfc406d88a, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -7166,6 +7174,10 @@ PrefabInstance:
     - target: {fileID: 3503617171219682053, guid: c807d6e291f2f3c4883915bfc406d88a, type: 3}
       propertyPath: m_Name
       value: 'Confetti_Rain_01_Main '
+      objectReference: {fileID: 0}
+    - target: {fileID: 3503617171219682053, guid: c807d6e291f2f3c4883915bfc406d88a, type: 3}
+      propertyPath: m_Layer
+      value: 11
       objectReference: {fileID: 0}
     - target: {fileID: 3991312088427579099, guid: c807d6e291f2f3c4883915bfc406d88a, type: 3}
       propertyPath: prewarm
@@ -7203,6 +7215,10 @@ PrefabInstance:
       propertyPath: moveWithTransform
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 5538751951436820618, guid: c807d6e291f2f3c4883915bfc406d88a, type: 3}
+      propertyPath: m_Layer
+      value: 11
+      objectReference: {fileID: 0}
     - target: {fileID: 5673938242466474659, guid: c807d6e291f2f3c4883915bfc406d88a, type: 3}
       propertyPath: m_SortingFudge
       value: 100
@@ -7210,6 +7226,10 @@ PrefabInstance:
     - target: {fileID: 6759485177185694277, guid: c807d6e291f2f3c4883915bfc406d88a, type: 3}
       propertyPath: m_SortingFudge
       value: 100
+      objectReference: {fileID: 0}
+    - target: {fileID: 6998649336657410332, guid: c807d6e291f2f3c4883915bfc406d88a, type: 3}
+      propertyPath: m_Layer
+      value: 11
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -7469,7 +7489,7 @@ SceneRoots:
   - {fileID: 442961291}
   - {fileID: 875129656}
   - {fileID: 909341594}
-  - {fileID: 1149491736}
   - {fileID: 2060825717}
+  - {fileID: 1149491736}
   - {fileID: 1268189552}
   - {fileID: 1437206087}

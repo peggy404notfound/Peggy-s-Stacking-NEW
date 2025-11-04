@@ -4,19 +4,27 @@ using UnityEngine;
 [RequireComponent(typeof(Collider2D))]
 public class PropPickup : MonoBehaviour
 {
+    [Header("拾取后处理")]
     [Tooltip("拾取后是否立刻销毁这个道具实例")]
     public bool destroyOnPickup = true;
 
-    [Header("拾取判定")]
+    [Header("重叠判定")]
     [Tooltip("要求的最小“实际重叠”穿透深度（米）。只有穿透达到该值才算拾取。")]
-    [Min(0f)] public float minPenetration = 0.02f; // 视你的世界单位，0.01~0.03常见
+    [Min(0f)] public float minPenetration = 0.02f; // 0.01~0.03 常见，按你世界单位调
 
-    bool _picked = false;
-    Collider2D _selfCol;
+    [Header("仅允许玩家主动丢下后的短窗口拾取")]
+    [Tooltip("只在 HoverMover.Drop() 之后的短时间窗口内允许拾取")]
+    public bool onlyDuringDropWindow = true;
+
+    [Tooltip("判定为下落的最小向下速度（米/秒），用来排除平台水平移动带来的误拾取")]
+    [Min(0f)] public float minDownSpeed = 0.15f; // 0.1~0.3 可调
+
+    private bool _picked = false;
+    private Collider2D _selfCol;
 
     void Reset()
     {
-        // 确保碰撞体是触发器（保持你原设计）
+        // 保证自身是触发器
         var c = GetComponent<Collider2D>();
         if (c) c.isTrigger = true;
     }
@@ -28,7 +36,6 @@ public class PropPickup : MonoBehaviour
             _selfCol.isTrigger = true;
     }
 
-    // 用统一入口，Enter/Stay 都尝试（只有满足“足够穿透”才会真正拾取）
     private void OnTriggerEnter2D(Collider2D other) => TryPickup(other);
     private void OnTriggerStay2D(Collider2D other) => TryPickup(other);
 
@@ -36,35 +43,43 @@ public class PropPickup : MonoBehaviour
     {
         if (_picked || !_selfCol || !other) return;
 
-        // —— 新增：要求达到“最小穿透深度” —— //
-        // Unity的 Collider2D.Distance：当重叠时 distance 为负值，其绝对值为穿透深度
-        var d = other.Distance(_selfCol);
-        if (!d.isOverlapped) return;                       // 没有重叠，直接返回
-        if (-d.distance < minPenetration) return;          // 穿透深度不足，不算拾取
+        // —— 新增：仅在Drop窗口 + 有足够向下速度时允许拾取 ——
+        if (onlyDuringDropWindow)
+        {
+            // 必须是刚被玩家Drop的那块积木（HoverMover在Drop时登记的Collider）
+            if (!HoverMover.IsColliderInDropWindow(other))
+                return;
 
-        // 只响应玩家当前在玩的积木（自己或父级有 BlockMark）
+            // 必须确实在向下运动，避免平台水平移动导致误拾取
+            var rb = other.attachedRigidbody;
+            if (rb == null || rb.velocity.y > -minDownSpeed)
+                return;
+        }
+
+        // —— 要求达到最小穿透深度，避免擦边触发 ——
+        var d = other.Distance(_selfCol);
+        if (!d.isOverlapped) return;              // 没重叠
+        if (-d.distance < minPenetration) return; // 穿透不够深
+
+        // —— 只响应玩家积木（自身或父对象有 BlockMark，并拿到玩家ID）——
         var mark = other.GetComponent<BlockMark>() ?? other.GetComponentInParent<BlockMark>();
         if (mark == null) return;
 
         int pid = mark.ownerPlayerId;
         if (pid != 1 && pid != 2) return;
 
-        // 找到对应玩家的单槽背包
+        // —— 放入对应玩家的单槽背包 —— 
         var inv = PlayerInventoryOneSlot.GetForPlayer(pid);
         if (inv == null) return;
 
-        // 从当前道具读取 ID（允许没有 PropItem 时也能正常放入一个默认 ID）
         var item = GetComponent<PropItem>();
         string propId = item ? item.propId : "unknown";
-
-        // 放入背包（覆盖）
         inv.Set(propId);
 
-        // 首次获得道具提示
+        // —— 首次获得道具时的键位提示（可选）——
         TurnManager.Instance?.TriggerPropUseKeyHintFor(pid);
 
         _picked = true;
-
         if (destroyOnPickup)
             Destroy(gameObject);
     }

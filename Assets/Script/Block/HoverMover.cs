@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 [RequireComponent(typeof(Rigidbody2D))]
 public class HoverMover : MonoBehaviour
@@ -29,10 +30,35 @@ public class HoverMover : MonoBehaviour
     // 用不受 timeScale 影响的时间做计时
     private float hoverStartUnscaled = -1f;
 
+    // ================== 新增：投放窗口注册 ==================
+    [Header("Drop → Prop Pickup Window")]
+    [SerializeField, Tooltip("玩家触发 Drop() 后，在这段时间内允许道具拾取（秒）")]
+    private float dropPickupWindow = 1.0f; // 可按手感调 0.6~1.2 秒
+
+    private Collider2D[] allCols;
+
+    // 静态注册表：Collider InstanceID -> 允许拾取的截止时间（unscaledTime）
+    private static readonly Dictionary<int, float> s_dropEligibleUntil =
+        new Dictionary<int, float>();
+
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
         if (rb) originalGravity = rb.gravityScale;
+
+        // 缓存自身及子物体的 Collider
+        allCols = GetComponentsInChildren<Collider2D>(includeInactive: false);
+    }
+
+    /// <summary>
+    /// 查询某个 Collider 是否处于“玩家刚丢下”的时间窗口内。
+    /// </summary>
+    public static bool IsColliderInDropWindow(Collider2D col)
+    {
+        if (!col) return false;
+        if (s_dropEligibleUntil.TryGetValue(col.GetInstanceID(), out float until))
+            return Time.unscaledTime <= until;
+        return false;
     }
 
     /// <summary>
@@ -56,7 +82,7 @@ public class HoverMover : MonoBehaviour
     }
 
     /// <summary>
-    /// 触发下落，恢复重力。
+    /// 触发下落，恢复重力，并开启“可拾取窗口”。
     /// </summary>
     public void Drop()
     {
@@ -67,6 +93,18 @@ public class HoverMover : MonoBehaviour
         {
             rb.velocity = Vector2.zero;
             rb.gravityScale = originalGravity <= 0f ? 1f : originalGravity;
+        }
+
+        // ===== 关键：注册这块积木的所有 Collider 在短时间内可拾取 =====
+        float until = Time.unscaledTime + Mathf.Max(0.05f, dropPickupWindow);
+        if (allCols == null || allCols.Length == 0)
+            allCols = GetComponentsInChildren<Collider2D>(includeInactive: false);
+
+        for (int i = 0; i < allCols.Length; i++)
+        {
+            var c = allCols[i];
+            if (!c || !c.enabled) continue;
+            s_dropEligibleUntil[c.GetInstanceID()] = until;
         }
     }
 
