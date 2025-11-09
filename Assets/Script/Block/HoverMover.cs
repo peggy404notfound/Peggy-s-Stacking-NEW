@@ -75,8 +75,8 @@ public class HoverMover : MonoBehaviour
         }
 
         // 若有全局速度管理器，可在这里覆盖 moveSpeed（可选）
-        // if (GameSpeedManager.Instance != null)
-        //     moveSpeed = GameSpeedManager.Instance.GetCurrentMoveSpeed();
+        if (GameSpeedManager.Instance != null)
+            moveSpeed = GameSpeedManager.Instance.GetCurrentMoveSpeed();
 
         hoverStartUnscaled = Time.unscaledTime;
     }

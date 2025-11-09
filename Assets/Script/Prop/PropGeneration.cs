@@ -26,7 +26,8 @@ public class PropGeneration : MonoBehaviour
 
     [Header("引用")]
     public Transform baseTransform;
-    public LayerMask solidLayers;   // 只用于“防重叠”检测
+    [Tooltip("仅用于与“积木（blocks）”的重叠检测")]
+    public LayerMask solidLayers;
     public Transform itemsParent;
 
     [Header("移动范围限制（务必填写）")]
@@ -41,29 +42,35 @@ public class PropGeneration : MonoBehaviour
     public int maxItemsPerSpawn = 1;
 
     [Header("位置权重（仅两类：平台内 / 平台外）")]
-    [Range(0f, 1f)] public float weightInsideBase = 0.70f;
-    [Range(0f, 1f)] public float weightOutsideBase = 0.30f;
+    [Range(0f, 1f)] public float weightInsideBase = 0.90f;
+    [Range(0f, 1f)] public float weightOutsideBase = 0.10f;
 
     [Header("通用")]
+    [Tooltip("与积木/道具的最小清空半径")]
     public float minClearRadius = 0.25f;
     public int maxTriesPerItem = 50;
+    [Tooltip("平台内：相对平台顶面的高度随机范围（世界单位）")]
     public Vector2 insideAboveBaseRange = new Vector2(0.20f, 0.80f);
 
     [Header("高度限制")]
     [Tooltip("道具最高高度 = 生成高度 - 本值")]
     public float yTopMarginBelowSpawn = 0.5f;
-
     [Tooltip("道具生成的最低世界坐标Y；低于该值的候选点会被丢弃")]
-    public float minSpawnHeight = -9999f;   // 比如设 0 或 Base 顶面之上
+    public float minSpawnHeight = -9999f;
 
-    [Header("稳产设置")]
-    public bool forceSpawnWhenEligible = true;
+    [Header("稳产设置（已取消兜底，不再强制）")]
+    public bool forceSpawnWhenEligible = false;
     public bool debugLogs = false;
 
-    [Header("防卡位额外判定")]
+    [Header("防卡位额外判定（仅保留圆形避让）")]
+    [Tooltip("圆形避让半径，用于远离带 BlockMark 的积木群")]
     public float extraBlockAvoidRadius = 0.6f;
-    public float verticalSafeBand = 0.8f;
-    public float fallingSpeedThreshold = 0.2f;
+
+    // —— 按你的要求：已移除“避免 HoverMover 横向移动带”的全部字段与逻辑 —— //
+
+    [Header("与其他道具防重叠")]
+    [Tooltip("道具自身的Layer，用于与已生成道具防重叠")]
+    public LayerMask itemLayers;
 
     [Header("倒计时末段不再产生新道具")]
     public bool blockSpawnsInLastSeconds = true;
@@ -71,13 +78,16 @@ public class PropGeneration : MonoBehaviour
     [Tooltip("倒计时脚本（可不拖，Awake中会自动寻找）")]
     public CountdownTimer countdown;
 
+    [Header("平台内 X 轴网格化（让中间也常出现离散点）")]
+    [Tooltip("X 轴对齐步长；=0 关闭。例如设为 1，可得到 …,-3,-2,-1,0,1,2,3,… 之类的点")]
+    public float insideSnapStep = 1f;
+
     // ===== 常量/状态 =====
     const float VIEWPORT_PADDING = 0.06f;
 
     int _currentTurnId = 0;
     readonly Dictionary<int, List<GameObject>> _activeByTurn = new();
 
-    // 便捷访问
     float MoveXMin => leftBound ? leftBound.position.x : float.NegativeInfinity;
     float MoveXMax => rightBound ? rightBound.position.x : float.PositiveInfinity;
     float MoveYCap => spawnPointY ? (spawnPointY.position.y - Mathf.Max(0f, yTopMarginBelowSpawn)) : float.PositiveInfinity;
@@ -93,29 +103,20 @@ public class PropGeneration : MonoBehaviour
     {
         _currentTurnId = turnId;
 
-        // 末段时间禁止刷道具
         if (blockSpawnsInLastSeconds && countdown != null && countdown.RemainingSeconds <= Mathf.Max(0f, noSpawnLastSeconds))
         {
             if (debugLogs) Debug.Log("[PropGen] blocked by countdown (last seconds)");
             return;
         }
 
-        // 回合节律（全局）
         if (turnId < firstSpawnAfterRounds) return;
         int sinceFirst = turnId - firstSpawnAfterRounds;
         if (sinceFirst % Mathf.Max(1, spawnEveryNRounds) != 0) return;
 
-        // 概率触发
         if (Random.value > Mathf.Clamp01(spawnChancePerWave)) return;
 
         int want = Mathf.Clamp(Random.Range(minItemsPerSpawn, maxItemsPerSpawn + 1), 1, 999);
         int made = SpawnWave(want);
-
-        // 兜底：至少刷 1 个
-        if (forceSpawnWhenEligible && made == 0)
-        {
-            if (TrySpawnOne(forceFallback: true)) made = 1;
-        }
 
         if (debugLogs) Debug.Log($"[PropGen] turn={turnId} want={want} made={made}");
     }
@@ -143,12 +144,10 @@ public class PropGeneration : MonoBehaviour
     {
         if (!baseTransform) return false;
 
-        // 正常随机采样
         for (int t = 0; t < maxTriesPerItem; t++)
         {
             if (!TryPickPositionSimple(out var pos)) continue;
 
-            // 避开积木与下落竖带
             if (IsUnsafeBecauseOfBlocks(pos)) continue;
 
             var prefab = PickPrefabWeighted(_currentTurnId);
@@ -162,38 +161,12 @@ public class PropGeneration : MonoBehaviour
             return true;
         }
 
-        // 兜底
-        if (forceFallback || forceSpawnWhenEligible)
-        {
-            if (TryFallbackPosition(out var pos))
-            {
-                // 兜底位置也要满足最低高度
-                if (pos.y < minSpawnHeight)
-                {
-                    pos.y = minSpawnHeight;
-                }
-
-                var prefab = PickPrefabWeighted(_currentTurnId);
-                if (prefab)
-                {
-                    var go = Instantiate(prefab, new Vector3(pos.x, pos.y, 0f),
-                                         Quaternion.identity, itemsParent ? itemsParent : transform);
-
-                    Register(go);
-                    MaybeTriggerFirstAppearHint(go);
-                    if (debugLogs) Debug.Log("[PropGen] fallback spawn");
-                    return true;
-                }
-            }
-        }
-
         if (debugLogs) Debug.Log("[PropGen] no spawn (sampling failed)");
         return false;
     }
 
     bool IsUnsafeBecauseOfBlocks(Vector2 pos)
     {
-        // 1) 圆域避让
         var hits = Physics2D.OverlapCircleAll(pos, extraBlockAvoidRadius);
         foreach (var h in hits)
         {
@@ -201,22 +174,6 @@ public class PropGeneration : MonoBehaviour
             if (h.GetComponentInParent<BlockMark>() != null)
                 return true;
         }
-
-        // 2) 竖向安全带
-        Vector2 boxCenter = pos + Vector2.up * (verticalSafeBand * 0.5f);
-        Vector2 boxSize = new Vector2(extraBlockAvoidRadius * 2f, verticalSafeBand);
-        var area = Physics2D.OverlapBoxAll(boxCenter, boxSize, 0f);
-        foreach (var a in area)
-        {
-            if (!a) continue;
-            var mark = a.GetComponentInParent<BlockMark>();
-            if (!mark) continue;
-
-            var rb = mark.GetComponent<Rigidbody2D>();
-            if (rb && rb.velocity.y < -Mathf.Abs(fallingSpeedThreshold))
-                return true;
-        }
-
         return false;
     }
 
@@ -230,12 +187,11 @@ public class PropGeneration : MonoBehaviour
         list.Add(go);
     }
 
-    // ========= 选位置（简化版：平台内 / 平台外） =========
+    // ========= 选位置（平台内 / 平台外） =========
     bool TryPickPositionSimple(out Vector2 pos)
     {
         pos = Vector2.zero;
 
-        // 内外权重
         float wInside = Mathf.Max(0f, weightInsideBase);
         float wOutside = Mathf.Max(0f, weightOutsideBase);
         float sum = wInside + wOutside;
@@ -245,13 +201,14 @@ public class PropGeneration : MonoBehaviour
         if (r <= wInside) pos = SampleInsideBase();
         else pos = SampleOutsideBase();
 
-        // 基本约束
         if (!IsWithinMoveBounds(pos)) return false;
         if (!IsInsideCamera(pos)) return false;
+
         if (!IsClear(pos, minClearRadius)) return false;
 
-        // 新增：最低高度过滤
         if (pos.y < minSpawnHeight) return false;
+
+        if (!IsClearFromItems(pos, minClearRadius)) return false;
 
         return true;
     }
@@ -267,7 +224,15 @@ public class PropGeneration : MonoBehaviour
         float yMin = rect.yMax + Mathf.Min(insideAboveBaseRange.x, insideAboveBaseRange.y);
         float yMax = Mathf.Min(MoveYCap, rect.yMax + Mathf.Max(insideAboveBaseRange.x, insideAboveBaseRange.y));
 
-        return new Vector2(Random.Range(xMin, xMax), Random.Range(yMin, yMax));
+        // 先在平台内均匀采样，再按步长网格对齐
+        float x = Random.Range(xMin, xMax);
+        if (insideSnapStep > 0f)
+        {
+            x = Mathf.Round(x / insideSnapStep) * insideSnapStep;
+            x = Mathf.Clamp(x, xMin, xMax);
+        }
+
+        return new Vector2(x, Random.Range(yMin, yMax));
     }
 
     Vector2 SampleOutsideBase()
@@ -275,16 +240,13 @@ public class PropGeneration : MonoBehaviour
         var baseRect = GetBaseRect();
         var camRect = GetCameraWorldRect(VIEWPORT_PADDING);
 
-        // 纵向范围
         float yMin = Mathf.Max(baseRect.yMax, camRect.yMin);
         float yMax = Mathf.Min(MoveYCap, camRect.yMax);
         float h = Mathf.Max(0f, yMax - yMin);
 
-        // 左侧区域
         float leftMinX = Mathf.Max(camRect.xMin, MoveXMin);
         float leftMaxX = Mathf.Min(baseRect.xMin, MoveXMax);
 
-        // 右侧区域
         float rightMinX = Mathf.Max(baseRect.xMax, MoveXMin);
         float rightMaxX = Mathf.Min(camRect.xMax, MoveXMax);
 
@@ -292,77 +254,23 @@ public class PropGeneration : MonoBehaviour
         bool hasRight = rightMaxX > rightMinX && h > 0f;
 
         if (!hasLeft && !hasRight)
-            return SampleInsideBase(); // 无外侧空间则退回内侧
+            return SampleInsideBase();
 
-        // 面积比例随机
         float areaLeft = hasLeft ? (leftMaxX - leftMinX) * h : 0f;
         float areaRight = hasRight ? (rightMaxX - rightMinX) * h : 0f;
         float sum = areaLeft + areaRight;
 
         float pick = Random.value * sum;
-        if (pick < areaLeft)
-            return new Vector2(Random.Range(leftMinX, leftMaxX), Random.Range(yMin, yMax));
-        else
-            return new Vector2(Random.Range(rightMinX, rightMaxX), Random.Range(yMin, yMax));
-    }
+        float x = (pick < areaLeft)
+            ? Random.Range(leftMinX, leftMaxX)
+            : Random.Range(rightMinX, rightMaxX);
 
-    // ―― fallback：平台内中央偏上 ――
-    bool TryFallbackPosition(out Vector2 pos)
-    {
-        var rect = GetBaseRect();
-
-        float xMin = Mathf.Max(rect.xMin, MoveXMin);
-        float xMax = Mathf.Min(rect.xMax, MoveXMax);
-        float yMin = rect.yMax + Mathf.Min(insideAboveBaseRange.x, insideAboveBaseRange.y);
-        float yMax = Mathf.Min(MoveYCap, rect.yMax + Mathf.Max(insideAboveBaseRange.x, insideAboveBaseRange.y));
-
-        pos = new Vector2(Mathf.Lerp(xMin, xMax, 0.5f), Mathf.Lerp(yMin, yMax, 0.75f));
-
-        // 兜底位置也尽量清空与抬高
-        if (!IsClear(pos, minClearRadius * 0.7f))
-            pos = new Vector2(Mathf.Lerp(xMin, xMax, 0.5f), Mathf.Lerp(yMin, yMax, 0.9f));
-
-        // 保证最低高度
-        if (pos.y < minSpawnHeight) pos.y = minSpawnHeight;
-
-        return true;
-    }
-
-    // ========== 选道具 ==========
-    GameObject PickPrefabWeighted(int turnId)
-    {
-        var pool = new List<WeightedItem>();
-        foreach (var wi in weightedItems)
+        if (insideSnapStep > 0f)
         {
-            if (!wi.prefab) continue;
-
-            if (turnId < wi.availableFromTurn) continue;
-
-            if (wi.turnsCooldown > 0 && (turnId - wi.lastSpawnTurn) <= wi.turnsCooldown) continue;
-
-            if (wi.weight <= 0f) continue;
-            pool.Add(wi);
+            x = Mathf.Round(x / insideSnapStep) * insideSnapStep;
         }
-        if (pool.Count == 0) return null;
 
-        float sum = 0f;
-        for (int i = 0; i < pool.Count; i++) sum += Mathf.Max(0f, pool[i].weight);
-        if (sum <= 0f) return null;
-
-        float pick = Random.value * sum;
-        float acc = 0f;
-        for (int i = 0; i < pool.Count; i++)
-        {
-            acc += Mathf.Max(0f, pool[i].weight);
-            if (pick <= acc)
-            {
-                pool[i].lastSpawnTurn = turnId;
-                return pool[i].prefab;
-            }
-        }
-        var last = pool[pool.Count - 1];
-        last.lastSpawnTurn = turnId;
-        return last.prefab;
+        return new Vector2(x, Random.Range(yMin, yMax));
     }
 
     // ========== 工具 ==========
@@ -388,6 +296,12 @@ public class PropGeneration : MonoBehaviour
     bool IsClear(Vector2 worldPos, float radius)
     {
         return Physics2D.OverlapCircle(worldPos, radius, solidLayers) == null;
+    }
+
+    bool IsClearFromItems(Vector2 worldPos, float radius)
+    {
+        if (itemLayers.value == 0) return true;
+        return Physics2D.OverlapCircle(worldPos, radius, itemLayers) == null;
     }
 
     bool IsInsideCamera(Vector2 worldPos)
@@ -416,7 +330,40 @@ public class PropGeneration : MonoBehaviour
         return p.x >= MoveXMin && p.x <= MoveXMax && p.y <= MoveYCap;
     }
 
-    // ========== 首次出现提示 ==========
+    // ========== 选道具 ==========
+    GameObject PickPrefabWeighted(int turnId)
+    {
+        var pool = new List<WeightedItem>();
+        foreach (var wi in weightedItems)
+        {
+            if (!wi.prefab) continue;
+            if (turnId < wi.availableFromTurn) continue;
+            if (wi.turnsCooldown > 0 && (turnId - wi.lastSpawnTurn) <= wi.turnsCooldown) continue;
+            if (wi.weight <= 0f) continue;
+            pool.Add(wi);
+        }
+        if (pool.Count == 0) return null;
+
+        float sum = 0f;
+        for (int i = 0; i < pool.Count; i++) sum += Mathf.Max(0f, pool[i].weight);
+        if (sum <= 0f) return null;
+
+        float pick = Random.value * sum;
+        float acc = 0f;
+        for (int i = 0; i < pool.Count; i++)
+        {
+            acc += Mathf.Max(0f, pool[i].weight);
+            if (pick <= acc)
+            {
+                pool[i].lastSpawnTurn = turnId;
+                return pool[i].prefab;
+            }
+        }
+        var last = pool[pool.Count - 1];
+        last.lastSpawnTurn = turnId;
+        return last.prefab;
+    }
+
     void MaybeTriggerFirstAppearHint(GameObject go)
     {
         if (go.GetComponentInChildren<PropGlueHint>(true) != null) { TurnManager.Instance?.TriggerGlueAppearIfNeeded(); return; }
